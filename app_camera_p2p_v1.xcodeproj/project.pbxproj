@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		BBFE1A3C2F8DE284007C6575 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = BBFE1A3B2F8DE284007C6575 /* WebRTC */; };
+		BBFE1A3F2F8DE623007C6575 /* LiveKit in Frameworks */ = {isa = PBXBuildFile; productRef = BBFE1A3E2F8DE623007C6575 /* LiveKit */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		BBFE1A1E2F8DDA49007C6575 /* app_camera_p2p_v1.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = app_camera_p2p_v1.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +28,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BBFE1A3C2F8DE284007C6575 /* WebRTC in Frameworks */,
+				BBFE1A3F2F8DE623007C6575 /* LiveKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +72,8 @@
 			);
 			name = app_camera_p2p_v1;
 			packageProductDependencies = (
+				BBFE1A3B2F8DE284007C6575 /* WebRTC */,
+				BBFE1A3E2F8DE623007C6575 /* LiveKit */,
 			);
 			productName = app_camera_p2p_v1;
 			productReference = BBFE1A1E2F8DDA49007C6575 /* app_camera_p2p_v1.app */;
@@ -94,6 +103,10 @@
 			);
 			mainGroup = BBFE1A152F8DDA49007C6575;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				BBFE1A3A2F8DE284007C6575 /* XCRemoteSwiftPackageReference "WebRTC" */,
+				BBFE1A3D2F8DE623007C6575 /* XCRemoteSwiftPackageReference "client-sdk-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BBFE1A1F2F8DDA49007C6575 /* Products */;
 			projectDirPath = "";
@@ -251,13 +264,18 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 83CBK546FB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "app-camera-p2p-v1-Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Ứng dụng cần truy cập Camera để chụp ảnh đại diện";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Ứng dụng cần quyền lưu ảnh độ phân giải cao vào thư viện của bạn";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -282,13 +300,18 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 83CBK546FB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "app-camera-p2p-v1-Info.plist";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Ứng dụng cần truy cập Camera để chụp ảnh đại diện";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Ứng dụng cần quyền lưu ảnh độ phân giải cao vào thư viện của bạn";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -328,6 +351,38 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		BBFE1A3A2F8DE284007C6575 /* XCRemoteSwiftPackageReference "WebRTC" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/stasel/WebRTC";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 147.0.0;
+			};
+		};
+		BBFE1A3D2F8DE623007C6575 /* XCRemoteSwiftPackageReference "client-sdk-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/livekit/client-sdk-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.13.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BBFE1A3B2F8DE284007C6575 /* WebRTC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BBFE1A3A2F8DE284007C6575 /* XCRemoteSwiftPackageReference "WebRTC" */;
+			productName = WebRTC;
+		};
+		BBFE1A3E2F8DE623007C6575 /* LiveKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BBFE1A3D2F8DE623007C6575 /* XCRemoteSwiftPackageReference "client-sdk-swift" */;
+			productName = LiveKit;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = BBFE1A162F8DDA49007C6575 /* Project object */;
 }

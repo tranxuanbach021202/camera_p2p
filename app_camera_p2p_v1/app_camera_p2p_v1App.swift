@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import LiveKit
 
 @main
 struct app_camera_p2p_v1App: App {

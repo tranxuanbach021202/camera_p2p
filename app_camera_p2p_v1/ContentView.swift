@@ -6,16 +6,21 @@
 //
 
 import SwiftUI
+import LiveKit
 
 struct ContentView: View {
+    
+    private let serverURL = "Test"
+       private let cameraToken = "Test"
+       private let viewerToken = "Test"
+       
+    
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
+        ModeSelectionView(
+                    serverURL: serverURL,
+                    cameraToken: cameraToken,
+                    viewerToken: viewerToken
+                )
     }
 }
 
