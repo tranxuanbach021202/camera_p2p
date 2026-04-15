@@ -13,10 +13,12 @@
 import SwiftUI
 
 struct ModeSelectionView: View {
-    
+
     let serverURL: String
     let cameraToken: String
     let viewerToken: String
+    let telegramBotToken: String
+    let telegramChatId: String
     
     @State private var selectedMode: AppMode? = nil
     
@@ -79,7 +81,9 @@ struct ModeSelectionView: View {
                 case .camera:
                     CameraPublisherView(
                         serverURL: serverURL,
-                        cameraToken: cameraToken
+                        cameraToken: cameraToken,
+                        telegramBotToken: telegramBotToken,
+                        telegramChatId: telegramChatId
                     )
                     .navigationBarBackButtonHidden(false)
                     

@@ -2,18 +2,13 @@
 //  LiveKitViewerService.swift
 //  app_camera_p2p_v1
 //
-//  Created by Bach Xuan on 15/4/26.
-//
-
-
-//
-//  LiveKitViewerService.swift
-//  app_camera_p2p_v1
-//
 
 import LiveKit
 import Combine
 import SwiftUI
+import os
+
+private let viewerLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.camera_p2p", category: "ViewerService")
 
 @MainActor
 class LiveKitViewerService: ObservableObject {
@@ -50,14 +45,14 @@ class LiveKitViewerService: ObservableObject {
             
             self.room = newRoom
             self.isConnected = true
-            print("✅ Viewer connected to room")
+            viewerLogger.info("✅ Viewer connected to room")
             
             // Lấy track ngay lập tức nếu camera đã phát trước khi viewer vào
             checkAndAssignExistingTrack(in: newRoom)
             
         } catch {
             errorMessage = "Connect failed: \(error.localizedDescription)"
-            print("❌ Viewer connect error: \(error)")
+            viewerLogger.error("❌ Viewer connect error: \(error)")
         }
     }
     
@@ -70,7 +65,7 @@ class LiveKitViewerService: ObservableObject {
                 data: data,
                 options: DataPublishOptions(topic: "camera_control", reliable: true)
             )
-            print("📤 Đã gửi lệnh switch_camera")
+            viewerLogger.debug("📤 Đã gửi lệnh switch_camera")
             // Cooldown 2.5s để tránh gửi liên tục trong khi camera đang xoay
             try? await Task.sleep(nanoseconds: 2_500_000_000)
             isSwitchingCamera = false
@@ -86,7 +81,7 @@ class LiveKitViewerService: ObservableObject {
         isConnected = false
         isReceiving = false
         room = nil
-        print("🔌 Viewer disconnected")
+        viewerLogger.info("🔌 Viewer disconnected")
     }
     
     // Hàm này quét xem trong room đã có video track nào chưa để hiển thị luôn
@@ -96,7 +91,7 @@ class LiveKitViewerService: ObservableObject {
                 if let track = publication.track as? VideoTrack {
                     self.remoteVideoTrack = track
                     self.isReceiving = true
-                    print("🎥 Found existing video track and assigned")
+                    viewerLogger.debug("🎥 Found existing video track and assigned")
                     return // Chỉ lấy track đầu tiên
                 }
             }
@@ -105,13 +100,12 @@ class LiveKitViewerService: ObservableObject {
 }
 
 // MARK: - RoomDelegate
-// MARK: - RoomDelegate
 extension LiveKitViewerService: RoomDelegate {
-    
+
     nonisolated func room(_ room: Room,
                           didUpdateConnectionState state: ConnectionState,
                           from oldState: ConnectionState) {
-        print("🔄 Viewer connection: \(oldState) → \(state)")
+        viewerLogger.debug("🔄 Viewer connection: \(String(describing: oldState)) → \(String(describing: state))")
         if state == .disconnected {
             Task { @MainActor in
                 self.isConnected = false
@@ -124,7 +118,7 @@ extension LiveKitViewerService: RoomDelegate {
     nonisolated func room(_ room: Room,
                           participant: RemoteParticipant,
                           didPublishTrack publication: RemoteTrackPublication) {
-        print("📡 Remote track published: \(publication.kind)")
+        viewerLogger.debug("📡 Remote track published: \(String(describing: publication.kind))")
     }
     
     // LiveKit 2.x: delegate không có tham số track, lấy qua publication.track
@@ -132,7 +126,7 @@ extension LiveKitViewerService: RoomDelegate {
                           participant: RemoteParticipant,
                           didSubscribeTrack publication: RemoteTrackPublication) {
         guard let videoTrack = publication.track as? VideoTrack else { return }
-        print("🎥 Video track subscribed and ready")
+        viewerLogger.info("🎥 Video track subscribed and ready")
         Task { @MainActor in
             self.remoteVideoTrack = videoTrack
             self.isReceiving = true
@@ -142,7 +136,7 @@ extension LiveKitViewerService: RoomDelegate {
     nonisolated func room(_ room: Room,
                           participant: RemoteParticipant,
                           didUnsubscribeTrack publication: RemoteTrackPublication) {
-        print("📴 Remote track unsubscribed")
+        viewerLogger.info("📴 Remote track unsubscribed")
         Task { @MainActor in
             if publication.kind == .video {
                 self.remoteVideoTrack = nil
@@ -154,7 +148,7 @@ extension LiveKitViewerService: RoomDelegate {
     nonisolated func room(_ room: Room,
                           participant: RemoteParticipant,
                           didUnpublishTrack publication: RemoteTrackPublication) {
-        print("📴 Remote track unpublished")
+        viewerLogger.info("📴 Remote track unpublished")
         Task { @MainActor in
             if publication.kind == .video {
                 self.remoteVideoTrack = nil
