@@ -43,6 +43,8 @@ struct CameraPublisherView: View {
 
     var body: some View {
         ZStack {
+            Color.black.ignoresSafeArea()
+
             // MARK: Camera Preview
             if let track = service.cameraTrack {
                 SwiftUIVideoView(track, layoutMode: .fit)
@@ -249,6 +251,7 @@ struct CameraPublisherView: View {
         }
         .navigationBarBackButtonHidden(isScreenLocked)
         .toolbar(isScreenLocked ? .hidden : .visible, for: .navigationBar)
+        .statusBarHidden(isScreenLocked)
         .onAppear {
             // Gán callback: mọi ảnh chụp (local hoặc remote từ viewer) đều đi qua đây
             service.onPhotoReady = { [telegramService] data in
