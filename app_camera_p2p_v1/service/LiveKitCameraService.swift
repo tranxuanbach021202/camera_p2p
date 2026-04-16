@@ -382,15 +382,15 @@ extension LiveKitCameraService: AVCapturePhotoCaptureDelegate {
             if let error = error {
                 self.errorMessage = "Lỗi phần cứng chụp ảnh: \(error.localizedDescription)"
                 result = nil
-            } else if let fileData = photo.fileDataRepresentation(),
-                      let image = UIImage(data: fileData) {
-                // Lưu vào Photos (fire-and-forget, lỗi được báo qua handleSaveResult)
-                UIImageWriteToSavedPhotosAlbum(
-                    image,
-                    self,
-                    #selector(handleSaveResult(_:didFinishSavingWithError:contextInfo:)),
-                    nil
-                )
+            } else if let fileData = photo.fileDataRepresentation() {
+                // Lưu vào Photos — tạm comment, chỉ gửi Telegram
+                // let image = UIImage(data: fileData)
+                // UIImageWriteToSavedPhotosAlbum(
+                //     image!,
+                //     self,
+                //     #selector(handleSaveResult(_:didFinishSavingWithError:contextInfo:)),
+                //     nil
+                // )
                 result = fileData
             } else {
                 self.errorMessage = "Lỗi xử lý file ảnh."
