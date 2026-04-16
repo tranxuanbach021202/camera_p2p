@@ -230,6 +230,10 @@ class LiveKitCameraService: NSObject, ObservableObject {
 
     /// Inject AVCapturePhotoOutput vào AVCaptureSession của LiveKit.
     /// Phải gọi lại mỗi khi switch camera vì DeviceInput thay đổi.
+    ///
+    /// [PLAN 1] Trước khi thêm output, scan toàn bộ device.formats để tìm format
+    /// có supportedMaxPhotoDimensions cao nhất mà vẫn hỗ trợ 480p video ở 15fps.
+    /// Switch activeFormat sang đó → ảnh chụp đạt max phần cứng, stream vẫn 480p.
     private func setupPhotoOutput() {
         guard let track = cameraTrack,
               let capturer = track.capturer as? CameraCapturer else { return }
@@ -242,11 +246,15 @@ class LiveKitCameraService: NSObject, ObservableObject {
             session.removeOutput(photoOutput)
         }
 
+        // [PLAN 1] Tìm và switch sang format tối ưu cho ảnh, trong khi vẫn giữ 480p video
+        if #available(iOS 16.0, *), let device = capturer.device {
+            switchToBestPhotoFormat(device: device)
+        }
+
         if session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
 
             if #available(iOS 16.0, *) {
-                // supportedMaxPhotoDimensions nằm trên activeFormat của device, không phải output.
                 let dims = capturer.device?.activeFormat.supportedMaxPhotoDimensions ?? []
                 let maxDim = dims.max { a, b in
                     let aPixels = Int64(a.width) * Int64(a.height)
@@ -255,18 +263,68 @@ class LiveKitCameraService: NSObject, ObservableObject {
                 }
                 if let maxDim {
                     photoOutput.maxPhotoDimensions = maxDim
-                    cameraLogger.info("📸 Max photo dimensions available: \(maxDim.width)×\(maxDim.height)")
+                    cameraLogger.info("📸 [Plan1] Photo dimensions after format switch: \(maxDim.width)×\(maxDim.height)")
                 }
             } else {
                 photoOutput.isHighResolutionCaptureEnabled = true
             }
 
             photoOutput.maxPhotoQualityPrioritization = .quality
-
             cameraLogger.debug("✅ Đã inject AVCapturePhotoOutput vào LiveKit session")
         }
 
         session.commitConfiguration()
+    }
+
+    /// [PLAN 1] Scan device.formats để tìm format có photo dimensions cao nhất
+    /// mà vẫn hỗ trợ video 640×480 (h480_43) ở 15fps.
+    /// Nếu tìm được format tốt hơn current activeFormat thì switch.
+    @available(iOS 16.0, *)
+    private func switchToBestPhotoFormat(device: AVCaptureDevice) {
+        // h480_43 = 640×480 — format phải hỗ trợ ít nhất kích thước này để LiveKit có thể stream
+        let minVideoWidth: Int32  = 640
+        let minVideoHeight: Int32 = 480
+        let minFps: Float64       = 15.0
+
+        var bestFormat: AVCaptureDevice.Format?
+        var bestPhotoPixels: Int64 = 0
+
+        for format in device.formats {
+            let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            guard dims.width >= minVideoWidth, dims.height >= minVideoHeight else { continue }
+
+            let supportsFps = format.videoSupportedFrameRateRanges.contains {
+                $0.maxFrameRate >= minFps
+            }
+            guard supportsFps else { continue }
+
+            let maxPixels = format.supportedMaxPhotoDimensions
+                .map { Int64($0.width) * Int64($0.height) }
+                .max() ?? 0
+
+            if maxPixels > bestPhotoPixels {
+                bestPhotoPixels = maxPixels
+                bestFormat = format
+            }
+        }
+
+        guard let bestFormat, bestFormat != device.activeFormat else {
+            cameraLogger.debug("📸 [Plan1] Format hiện tại đã tối ưu hoặc không có format nào tốt hơn")
+            return
+        }
+
+        let bestDim = bestFormat.supportedMaxPhotoDimensions.max {
+            Int64($0.width) * Int64($0.height) < Int64($1.width) * Int64($1.height)
+        }
+        cameraLogger.info("📸 [Plan1] Switching activeFormat → photo max: \(bestDim?.width ?? 0)×\(bestDim?.height ?? 0)")
+
+        do {
+            try device.lockForConfiguration()
+            device.activeFormat = bestFormat
+            device.unlockForConfiguration()
+        } catch {
+            cameraLogger.error("❌ [Plan1] Không thể switch format: \(error)")
+        }
     }
 
     // MARK: - Capture
