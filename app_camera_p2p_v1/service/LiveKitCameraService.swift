@@ -35,13 +35,17 @@ class LiveKitCameraService: NSObject, ObservableObject {
     // Trả về Data? — nil nếu chụp thất bại, jpeg data nếu thành công.
     private var captureContinuation: CheckedContinuation<Data?, Never>?
 
+    // Callback được gọi sau khi chụp ảnh thành công (dù local hay remote).
+    // View gán closure này để xử lý tiếp — ví dụ: gửi Telegram.
+    var onPhotoReady: ((Data) async -> Void)?
+
     // MARK: - Camera State
     @Published var zoomFactor: CGFloat = 1.0
     var maxZoomFactor: CGFloat = 8.0
-
-    // Tracks whether a camera position switch is in progress.
-    // Used to prevent simultaneous capture during switch.
     @Published private(set) var isSwitchingCamera = false
+
+    // MARK: - Microphone State
+    @Published var isMicEnabled: Bool = false
 
     init(serverURL: String, token: String, roomName: String) {
         self.serverURL = serverURL
@@ -99,7 +103,7 @@ class LiveKitCameraService: NSObject, ObservableObject {
             let roomOptions = RoomOptions(
                 defaultCameraCaptureOptions: CameraCaptureOptions(
                     position: .front,
-                    dimensions: .h1440_43,
+                    dimensions: .h480_43,
                     fps: 24
                 )
             )
@@ -116,7 +120,8 @@ class LiveKitCameraService: NSObject, ObservableObject {
             cameraLogger.info("✅ Connected to room: \(self.roomName)")
 
         } catch {
-            errorMessage = "Connect failed: \(error.localizedDescription)"
+            cameraLogger.error("❌ connect() threw: \(String(describing: error))")
+            errorMessage = "Kết nối thất bại: \(String(describing: error))"
         }
     }
 
@@ -165,6 +170,9 @@ class LiveKitCameraService: NSObject, ObservableObject {
         setupPhotoOutput()
         isPublishing = true
         cameraLogger.info("✅ Camera publishing started")
+
+        // Bật microphone cùng lúc với camera
+        await enableMicrophone()
     }
 
     func stopPublishing() async {
@@ -176,11 +184,32 @@ class LiveKitCameraService: NSObject, ObservableObject {
             } else {
                 try await room.localParticipant.setCamera(enabled: false)
             }
+            try await room.localParticipant.setMicrophone(enabled: false)
         } catch {
             cameraLogger.error("⚠️ Unpublish error: \(error)")
         }
         cameraTrack = nil
         isPublishing = false
+        isMicEnabled = false
+    }
+
+    func toggleMicrophone() {
+        Task { await setMicrophone(enabled: !isMicEnabled) }
+    }
+
+    private func enableMicrophone() async {
+        await setMicrophone(enabled: true)
+    }
+
+    private func setMicrophone(enabled: Bool) async {
+        guard let room = room else { return }
+        do {
+            try await room.localParticipant.setMicrophone(enabled: enabled)
+            isMicEnabled = enabled
+            cameraLogger.info("\(enabled ? "🎙️ Microphone ON" : "🔇 Microphone OFF")")
+        } catch {
+            cameraLogger.error("❌ setMicrophone(\(enabled)) failed: \(error)")
+        }
     }
 
     func disconnect() async {
@@ -322,6 +351,7 @@ extension LiveKitCameraService: RoomDelegate {
     ) {
         cameraLogger.debug("🔄 Camera connection: \(String(describing: oldState)) → \(String(describing: state))")
         if state == .disconnected {
+            cameraLogger.warning("⚠️ Disconnected from room")
             Task { @MainActor in self.isConnected = false }
         }
     }
@@ -341,8 +371,9 @@ extension LiveKitCameraService: RoomDelegate {
     }
 
     nonisolated func room(_ room: Room, didFailToConnectWithError error: LiveKitError?) {
-        let msg = error?.localizedDescription ?? "Unknown error"
-        Task { @MainActor in self.errorMessage = "Failed to connect: \(msg)" }
+        let detail = error.map { String(describing: $0) } ?? "nil — server đóng kết nối không có lý do cụ thể"
+        cameraLogger.error("❌ didFailToConnectWithError: \(detail)")
+        Task { @MainActor in self.errorMessage = "Kết nối thất bại: \(detail)" }
     }
 
     nonisolated func room(_ room: Room,
@@ -355,6 +386,14 @@ extension LiveKitCameraService: RoomDelegate {
         cameraLogger.debug("📨 Nhận lệnh từ viewer: \(command)")
         if command == "switch_camera" {
             Task { @MainActor in self.switchCamera() }
+        } else if command == "capture_photo" {
+            Task { @MainActor in
+                guard let data = await self.captureAndSavePhoto() else { return }
+                await self.onPhotoReady?(data)
+            }
+        } else if command.hasPrefix("zoom:"),
+                  let factor = Double(command.dropFirst(5)) {
+            Task { @MainActor in self.setZoom(factor: CGFloat(factor)) }
         }
     }
 }

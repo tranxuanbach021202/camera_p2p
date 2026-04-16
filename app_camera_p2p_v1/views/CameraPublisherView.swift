@@ -15,6 +15,9 @@ struct CameraPublisherView: View {
     @State private var isCapturing: Bool = false
     @State private var baseZoom: CGFloat = 1.0
 
+    // MARK: - Controls Visibility
+    @State private var isControlsVisible: Bool = true
+
     // MARK: - Screen Lock
     @State private var isScreenLocked: Bool = false
     @State private var unlockProgress: CGFloat = 0
@@ -68,96 +71,118 @@ struct CameraPublisherView: View {
             VStack {
                 Spacer()
 
-                if service.isPublishing {
-                    ZoomControlBar(
-                        zoomFactor: service.zoomFactor,
-                        maxZoom: service.maxZoomFactor,
-                        onZoomChange: { newZoom in
-                            service.setZoom(factor: newZoom)
-                            baseZoom = newZoom
-                        }
-                    )
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
-                    .opacity(isCapturing ? 0 : 1.0)
-                }
-
-                HStack(spacing: 20) {
-                    // Nút Start / Stop stream
-                    Button(service.isPublishing ? "Stop Stream" : "Start Stream") {
-                        Task {
-                            if service.isPublishing {
-                                await service.stopPublishing()
-                            } else {
-                                await service.connect()
-                                if service.isConnected {
-                                    await service.startPublishingCamera()
-                                }
-                            }
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isLocked)
-
+                if isControlsVisible {
                     if service.isPublishing {
-                        // Nút chụp ảnh
-                        Button {
-                            Task {
-                                withAnimation(.easeInOut(duration: 0.2)) { isCapturing = true }
-                                let imageData = await service.captureAndSavePhoto()
-                                withAnimation(.easeInOut(duration: 0.2)) { isCapturing = false }
+                        ZoomControlBar(
+                            zoomFactor: service.zoomFactor,
+                            maxZoom: service.maxZoomFactor,
+                            onZoomChange: { newZoom in
+                                service.setZoom(factor: newZoom)
+                                baseZoom = newZoom
+                            }
+                        )
+                        .padding(.horizontal)
+                        .padding(.bottom, 8)
+                        .opacity(isCapturing ? 0 : 1.0)
+                    }
 
-                                // Gửi lên Telegram nếu chụp thành công và đã cấu hình
-                                if let imageData, telegramService.isConfigured {
-                                    let caption = "📷 Camera P2P — \(formattedNow())"
-                                    await telegramService.sendPhoto(imageData, caption: caption)
+                    HStack(spacing: 20) {
+                        Button(service.isPublishing ? "Stop Stream" : "Start Stream") {
+                            Task {
+                                if service.isPublishing {
+                                    await service.stopPublishing()
+                                } else {
+                                    await service.connect()
+                                    if service.isConnected {
+                                        await service.startPublishingCamera()
+                                    }
                                 }
                             }
-                        } label: {
-                            Image(systemName: "camera.circle.fill")
-                                .font(.system(size: 44))
-                                .foregroundColor(.white)
-                                .background(Circle().fill(Color.black.opacity(0.3)))
                         }
+                        .buttonStyle(.borderedProminent)
                         .disabled(isLocked)
 
-                        // Nút đổi camera
-                        Button {
-                            service.switchCamera()
-                            baseZoom = 1.0
-                            service.setZoom(factor: 1.0)
-                        } label: {
-                            if service.isSwitchingCamera {
-                                ProgressView()
-                                    .frame(width: 20, height: 20)
-                            } else {
-                                Image(systemName: "camera.rotate")
+                        if service.isPublishing {
+                            // Nút chụp ảnh
+                            Button {
+                                Task {
+                                    withAnimation(.easeInOut(duration: 0.2)) { isCapturing = true }
+                                    let imageData = await service.captureAndSavePhoto()
+                                    withAnimation(.easeInOut(duration: 0.2)) { isCapturing = false }
+                                    if let imageData {
+                                        await service.onPhotoReady?(imageData)
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "camera.circle.fill")
+                                    .font(.system(size: 44))
+                                    .foregroundColor(.white)
+                                    .background(Circle().fill(Color.black.opacity(0.3)))
                             }
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(isLocked)
+                            .disabled(isLocked)
 
-                        // Nút khoá màn hình
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                isScreenLocked = true
+                            // Nút đổi camera
+                            Button {
+                                service.switchCamera()
+                                baseZoom = 1.0
+                                service.setZoom(factor: 1.0)
+                            } label: {
+                                if service.isSwitchingCamera {
+                                    ProgressView().frame(width: 20, height: 20)
+                                } else {
+                                    Image(systemName: "camera.rotate")
+                                }
                             }
-                        } label: {
-                            Image(systemName: "lock.fill")
-                                .font(.title2)
-                                .foregroundColor(.white)
+                            .buttonStyle(.bordered)
+                            .disabled(isLocked)
+
+                            // Nút mute/unmute mic
+                            Button {
+                                service.toggleMicrophone()
+                            } label: {
+                                Image(systemName: service.isMicEnabled ? "mic.fill" : "mic.slash.fill")
+                                    .font(.title2)
+                                    .foregroundColor(service.isMicEnabled ? .green : .red)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isLocked)
+
+                            // Nút khoá màn hình
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.3)) { isScreenLocked = true }
+                            } label: {
+                                Image(systemName: "lock.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.white)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(isLocked)
+                        }
+
+                        Button("Disconnect") {
+                            Task { await service.disconnect() }
                         }
                         .buttonStyle(.bordered)
                         .disabled(isLocked)
                     }
-
-                    Button("Disconnect") {
-                        Task { await service.disconnect() }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isLocked)
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                .padding()
+
+                // Nút toggle ẩn/hiện controls — luôn hiển thị
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        isControlsVisible.toggle()
+                    }
+                } label: {
+                    Image(systemName: isControlsVisible ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 36, height: 20)
+                        .background(.black.opacity(0.4), in: Capsule())
+                }
+                .padding(.bottom, 8)
             }
 
             // MARK: Loading Overlay (chụp ảnh + gửi Telegram)
@@ -225,6 +250,14 @@ struct CameraPublisherView: View {
         .navigationBarBackButtonHidden(isScreenLocked)
         .toolbar(isScreenLocked ? .hidden : .visible, for: .navigationBar)
         .onAppear {
+            // Gán callback: mọi ảnh chụp (local hoặc remote từ viewer) đều đi qua đây
+            service.onPhotoReady = { [telegramService] data in
+                guard telegramService.isConfigured else { return }
+                let f = DateFormatter()
+                f.dateFormat = "dd/MM/yyyy HH:mm:ss"
+                let caption = "📷 Camera P2P — \(f.string(from: Date()))"
+                await telegramService.sendPhoto(data, caption: caption)
+            }
             Task {
                 await service.connect()
                 if service.isConnected {

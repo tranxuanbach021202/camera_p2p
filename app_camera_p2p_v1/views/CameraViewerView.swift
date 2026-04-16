@@ -17,6 +17,7 @@ struct CameraViewerView: View {
     
     @StateObject private var service: LiveKitViewerService
     @Environment(\.dismiss) private var dismiss
+    @State private var baseZoom: CGFloat = 1.0
     
     init(serverURL: String, viewerToken: String) {
         _service = StateObject(wrappedValue: LiveKitViewerService(
@@ -34,6 +35,16 @@ struct CameraViewerView: View {
             if let track = service.remoteVideoTrack {
                 SwiftUIVideoView(track, layoutMode: .fit)
                     .ignoresSafeArea()
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { value in
+                                let newZoom = baseZoom * value
+                                Task { await service.sendZoomCommand(factor: newZoom) }
+                            }
+                            .onEnded { _ in
+                                baseZoom = service.zoomFactor
+                            }
+                    )
             } else {
                 WaitingForCameraView(isConnected: service.isConnected)
             }
@@ -65,8 +76,54 @@ struct CameraViewerView: View {
 
                 // MARK: Bottom controls (chỉ hiện khi đang nhận stream)
                 if service.isReceiving {
-                    HStack {
-                        Spacer()
+                    ZoomControlBar(
+                        zoomFactor: service.zoomFactor,
+                        maxZoom: service.maxZoomFactor,
+                        onZoomChange: { newZoom in
+                            Task { await service.sendZoomCommand(factor: newZoom) }
+                            baseZoom = newZoom
+                        }
+                    )
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+
+                    HStack(spacing: 32) {
+                        // Nút speaker on/off
+                        Button {
+                            service.toggleSpeaker()
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(.ultraThinMaterial)
+                                    .frame(width: 56, height: 56)
+                                Image(systemName: service.isSpeakerEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(service.isSpeakerEnabled ? .white : .red)
+                            }
+                        }
+
+                        // Nút chụp ảnh
+                        Button {
+                            Task { await service.sendCapturePhotoCommand() }
+                        } label: {
+                            ZStack {
+                                // Viền ngoài kiểu shutter
+                                Circle()
+                                    .stroke(Color.white.opacity(0.8), lineWidth: 3)
+                                    .frame(width: 64, height: 64)
+                                Circle()
+                                    .fill(service.isCapturing ? Color.white.opacity(0.4) : Color.white.opacity(0.9))
+                                    .frame(width: 54, height: 54)
+                                if service.isCapturing {
+                                    ProgressView()
+                                        .tint(.black)
+                                        .scaleEffect(0.9)
+                                }
+                            }
+                        }
+                        .disabled(service.isCapturing)
+
+                        // Nút xoay camera
                         Button {
                             Task { await service.sendSwitchCameraCommand() }
                         } label: {
@@ -86,7 +143,6 @@ struct CameraViewerView: View {
                             }
                         }
                         .disabled(service.isSwitchingCamera)
-                        Spacer()
                     }
                     .padding(.bottom, 32)
                     .transition(.move(edge: .bottom).combined(with: .opacity))

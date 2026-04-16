@@ -4,6 +4,7 @@
 //
 
 import LiveKit
+import AVFoundation
 import Combine
 import SwiftUI
 import os
@@ -16,6 +17,10 @@ class LiveKitViewerService: ObservableObject {
     @Published var isConnected = false
     @Published var isReceiving = false
     @Published var isSwitchingCamera = false
+    @Published var isCapturing = false
+    @Published var zoomFactor: CGFloat = 1.0
+    let maxZoomFactor: CGFloat = 8.0
+    @Published var isSpeakerEnabled: Bool = true
     @Published var errorMessage: String?
     @Published private(set) var remoteVideoTrack: VideoTrack?
     
@@ -46,7 +51,10 @@ class LiveKitViewerService: ObservableObject {
             self.room = newRoom
             self.isConnected = true
             viewerLogger.info("✅ Viewer connected to room")
-            
+
+            // Route audio ra loa ngoài (mặc định iOS dùng tai nghe/earpiece)
+            routeAudioToSpeaker(isSpeakerEnabled)
+
             // Lấy track ngay lập tức nếu camera đã phát trước khi viewer vào
             checkAndAssignExistingTrack(in: newRoom)
             
@@ -72,6 +80,52 @@ class LiveKitViewerService: ObservableObject {
         } catch {
             isSwitchingCamera = false
             errorMessage = "Không gửi được lệnh: \(error.localizedDescription)"
+        }
+    }
+
+    func toggleSpeaker() {
+        isSpeakerEnabled.toggle()
+        routeAudioToSpeaker(isSpeakerEnabled)
+    }
+
+    private func routeAudioToSpeaker(_ speaker: Bool) {
+        do {
+            try AVAudioSession.sharedInstance().overrideOutputAudioPort(speaker ? .speaker : .none)
+            viewerLogger.info("🔊 Audio route → \(speaker ? "speaker" : "default")")
+        } catch {
+            viewerLogger.error("❌ Audio route error: \(error)")
+        }
+    }
+
+    func sendZoomCommand(factor: CGFloat) async {
+        guard let room = room, isConnected else { return }
+        let clamped = min(max(factor, 1.0), maxZoomFactor)
+        zoomFactor = clamped
+        let command = String(format: "zoom:%.3f", clamped)
+        guard let data = command.data(using: .utf8) else { return }
+        // reliable: false — zoom là real-time, ưu tiên tốc độ hơn đảm bảo giao hàng
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: false)
+        )
+    }
+
+    func sendCapturePhotoCommand() async {
+        guard let room = room, isConnected, !isCapturing else { return }
+        do {
+            isCapturing = true
+            let data = "capture_photo".data(using: .utf8)!
+            try await room.localParticipant.publish(
+                data: data,
+                options: DataPublishOptions(topic: "camera_control", reliable: true)
+            )
+            viewerLogger.debug("📤 Đã gửi lệnh capture_photo")
+            // Cooldown 3s — đủ để camera hoàn tất chụp và lưu ảnh
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            isCapturing = false
+        } catch {
+            isCapturing = false
+            errorMessage = "Không gửi được lệnh chụp ảnh: \(error.localizedDescription)"
         }
     }
 
