@@ -10,6 +10,7 @@ import Combine
 struct CameraPublisherView: View {
 
     @StateObject private var service: LiveKitCameraService
+    @StateObject private var telegramService: TelegramService
 
     @State private var isCapturing: Bool = false
     @State private var baseZoom: CGFloat = 1.0
@@ -19,19 +20,22 @@ struct CameraPublisherView: View {
     @State private var unlockProgress: CGFloat = 0
     @State private var unlockTimer: Timer? = nil
     @State private var isHoldingToUnlock: Bool = false
-    
-    init(serverURL: String, cameraToken: String) {
+
+    init(serverURL: String, cameraToken: String, telegramBotToken: String, telegramChatId: String) {
         _service = StateObject(wrappedValue: LiveKitCameraService(
             serverURL: serverURL,
             token: cameraToken,
             roomName: "alfred-room"
         ))
+        _telegramService = StateObject(wrappedValue: TelegramService(
+            botToken: telegramBotToken,
+            chatId: telegramChatId
+        ))
     }
 
-    // FIX: Tách điều kiện disable nút thành computed property cho rõ ràng.
-    // Nút bị khoá khi đang chụp ẢNH hoặc đang switch camera.
+    // Nút bị khoá khi đang chụp ảnh, đang switch camera, hoặc đang gửi Telegram.
     private var isLocked: Bool {
-        isCapturing || service.isSwitchingCamera
+        isCapturing || service.isSwitchingCamera || telegramService.isSending
     }
 
     var body: some View {
@@ -100,8 +104,14 @@ struct CameraPublisherView: View {
                         Button {
                             Task {
                                 withAnimation(.easeInOut(duration: 0.2)) { isCapturing = true }
-                                await service.captureAndSavePhoto()
+                                let imageData = await service.captureAndSavePhoto()
                                 withAnimation(.easeInOut(duration: 0.2)) { isCapturing = false }
+
+                                // Gửi lên Telegram nếu chụp thành công và đã cấu hình
+                                if let imageData, telegramService.isConfigured {
+                                    let caption = "📷 Camera P2P — \(formattedNow())"
+                                    await telegramService.sendPhoto(imageData, caption: caption)
+                                }
                             }
                         } label: {
                             Image(systemName: "camera.circle.fill")
@@ -150,8 +160,8 @@ struct CameraPublisherView: View {
                 .padding()
             }
 
-            // MARK: Loading Overlay
-            if isCapturing {
+            // MARK: Loading Overlay (chụp ảnh + gửi Telegram)
+            if isCapturing || telegramService.isSending {
                 ZStack {
                     Color.black.opacity(0.6)
                         .edgesIgnoringSafeArea(.all)
@@ -161,7 +171,7 @@ struct CameraPublisherView: View {
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             .scaleEffect(1.5)
 
-                        Text("Đang lưu ảnh...")
+                        Text(telegramService.isSending ? "Đang gửi Telegram..." : "Đang lưu ảnh...")
                             .font(.system(size: 16, weight: .medium))
                             .foregroundColor(.white)
                     }
@@ -222,11 +232,27 @@ struct CameraPublisherView: View {
                 }
             }
         }
+        .onDisappear {
+            Task { await service.disconnect() }
+        }
         .alert("Error", isPresented: .constant(service.errorMessage != nil)) {
             Button("OK") { service.errorMessage = nil }
         } message: {
             Text(service.errorMessage ?? "")
         }
+        .alert("Telegram", isPresented: .constant(telegramService.lastError != nil)) {
+            Button("OK") { telegramService.lastError = nil }
+        } message: {
+            Text(telegramService.lastError ?? "")
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func formattedNow() -> String {
+        let f = DateFormatter()
+        f.dateFormat = "dd/MM/yyyy HH:mm:ss"
+        return f.string(from: Date())
     }
 
     // MARK: - Screen Lock Helpers

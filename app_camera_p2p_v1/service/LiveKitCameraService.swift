@@ -8,6 +8,9 @@ import AVFoundation
 import Combine
 import SwiftUI
 import UIKit
+import os
+
+private let cameraLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.camera_p2p", category: "CameraService")
 
 @MainActor
 class LiveKitCameraService: NSObject, ObservableObject {
@@ -17,9 +20,11 @@ class LiveKitCameraService: NSObject, ObservableObject {
     @Published var isPublishing = false
     @Published var errorMessage: String?
 
-    private weak var localParticipant: LocalParticipant?
     @Published private(set) var cameraTrack: LocalVideoTrack?
     private var videoPublication: LocalTrackPublication?
+
+    // Continuation dùng để chờ delegate báo camera track sẵn sàng.
+    private var trackReadyContinuation: CheckedContinuation<LocalVideoTrack?, Never>?
 
     let serverURL: String
     let token: String
@@ -27,7 +32,8 @@ class LiveKitCameraService: NSObject, ObservableObject {
 
     // MARK: - Photo Capture Properties
     private let photoOutput = AVCapturePhotoOutput()
-    private var captureContinuation: CheckedContinuation<Void, Never>?
+    // Trả về Data? — nil nếu chụp thất bại, jpeg data nếu thành công.
+    private var captureContinuation: CheckedContinuation<Data?, Never>?
 
     // MARK: - Camera State
     @Published var zoomFactor: CGFloat = 1.0
@@ -80,7 +86,7 @@ class LiveKitCameraService: NSObject, ObservableObject {
             self.zoomFactor = clampedFactor
             self.maxZoomFactor = min(device.activeFormat.videoMaxZoomFactor, 8.0)
         } catch {
-            print("Zoom error: \(error)")
+            cameraLogger.error("❌ Zoom error: \(error)")
         }
     }
 
@@ -106,9 +112,8 @@ class LiveKitCameraService: NSObject, ObservableObject {
             )
 
             self.room = newRoom
-            self.localParticipant = newRoom.localParticipant
             self.isConnected = true
-            print("✅ Connected to room: \(roomName)")
+            cameraLogger.info("✅ Connected to room: \(self.roomName)")
 
         } catch {
             errorMessage = "Connect failed: \(error.localizedDescription)"
@@ -120,29 +125,46 @@ class LiveKitCameraService: NSObject, ObservableObject {
 
         do {
             try await room.localParticipant.setCamera(enabled: true)
-
-            // FIX: Thay delay cứng 300ms bằng vòng lặp polling có timeout.
-            // Chờ cho đến khi track thực sự sẵn sàng, tối đa 2 giây.
-            let deadline = Date().addingTimeInterval(2.0)
-            while Date() < deadline {
-                if let track = room.localParticipant.firstCameraVideoTrack as? LocalVideoTrack {
-                    self.cameraTrack = track
-                    break
-                }
-                try? await Task.sleep(nanoseconds: 50_000_000) // poll mỗi 50ms
-            }
-
-            guard cameraTrack != nil else {
-                errorMessage = "Camera track không khởi động được sau 2 giây."
-                return
-            }
-
-            setupPhotoOutput()
-            self.isPublishing = true
-
         } catch {
             errorMessage = "Publish camera failed: \(error)"
+            cameraLogger.error("❌ setCamera failed: \(error)")
+            return
         }
+
+        // Kiểm tra ngay nếu track đã sẵn sàng (trường hợp SDK trả về đồng bộ)
+        if let existing = room.localParticipant.firstCameraVideoTrack as? LocalVideoTrack {
+            cameraLogger.debug("✅ Camera track ready immediately")
+            self.cameraTrack = existing
+            setupPhotoOutput()
+            isPublishing = true
+            return
+        }
+
+        // Chờ delegate didPublishTrack báo track sẵn sàng, timeout 2 giây.
+        // Tránh polling — SDK sẽ gọi callback khi track thực sự được publish.
+        cameraLogger.debug("⏳ Waiting for camera track via delegate...")
+        let track = await withCheckedContinuation { (continuation: CheckedContinuation<LocalVideoTrack?, Never>) in
+            self.trackReadyContinuation = continuation
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                await MainActor.run {
+                    guard let self, let cont = self.trackReadyContinuation else { return }
+                    cameraLogger.warning("⚠️ Camera track timeout sau 2 giây")
+                    cont.resume(returning: nil)
+                    self.trackReadyContinuation = nil
+                }
+            }
+        }
+
+        guard let track else {
+            errorMessage = "Camera track không khởi động được sau 2 giây."
+            return
+        }
+
+        self.cameraTrack = track
+        setupPhotoOutput()
+        isPublishing = true
+        cameraLogger.info("✅ Camera publishing started")
     }
 
     func stopPublishing() async {
@@ -155,7 +177,7 @@ class LiveKitCameraService: NSObject, ObservableObject {
                 try await room.localParticipant.setCamera(enabled: false)
             }
         } catch {
-            print("⚠️ Unpublish error: \(error)")
+            cameraLogger.error("⚠️ Unpublish error: \(error)")
         }
         cameraTrack = nil
         isPublishing = false
@@ -197,7 +219,7 @@ class LiveKitCameraService: NSObject, ObservableObject {
                 photoOutput.maxPhotoQualityPrioritization = .quality
             }
 
-            print("✅ Đã inject AVCapturePhotoOutput vào LiveKit session")
+            cameraLogger.debug("✅ Đã inject AVCapturePhotoOutput vào LiveKit session")
         }
 
         session.commitConfiguration()
@@ -205,13 +227,15 @@ class LiveKitCameraService: NSObject, ObservableObject {
 
     // MARK: - Capture
 
-    func captureAndSavePhoto() async {
+    /// Chụp ảnh và lưu vào thư viện. Trả về JPEG Data để caller dùng tiếp (vd: gửi Telegram).
+    /// Trả về nil nếu chụp thất bại.
+    func captureAndSavePhoto() async -> Data? {
         guard photoOutput.connections.count > 0 else {
             self.errorMessage = "Camera chưa sẵn sàng để chụp ảnh."
-            return
+            return nil
         }
 
-        print("📸 Đang yêu cầu cảm biến chụp ảnh...")
+        cameraLogger.debug("📸 Đang yêu cầu cảm biến chụp ảnh...")
 
         let settings = AVCapturePhotoSettings()
         settings.photoQualityPrioritization = self.photoOutput.maxPhotoQualityPrioritization
@@ -223,7 +247,7 @@ class LiveKitCameraService: NSObject, ObservableObject {
             }
         }
 
-        await withCheckedContinuation { continuation in
+        return await withCheckedContinuation { continuation in
             self.captureContinuation = continuation
             self.photoOutput.capturePhoto(with: settings, delegate: self)
         }
@@ -240,32 +264,30 @@ extension LiveKitCameraService: AVCapturePhotoCaptureDelegate {
         error: Error?
     ) {
         Task { @MainActor in
-            // defer đảm bảo continuation luôn được resume dù xảy ra lỗi gì,
-            // tránh deadlock cho captureAndSavePhoto().
-            defer {
-                self.captureContinuation?.resume()
-                self.captureContinuation = nil
-            }
+            // Xác định kết quả: trả về Data nếu thành công, nil nếu lỗi.
+            let result: Data?
 
             if let error = error {
                 self.errorMessage = "Lỗi phần cứng chụp ảnh: \(error.localizedDescription)"
-                return
-            }
-
-            guard let fileData = photo.fileDataRepresentation(),
-                  let image = UIImage(data: fileData) else {
+                result = nil
+            } else if let fileData = photo.fileDataRepresentation(),
+                      let image = UIImage(data: fileData) {
+                // Lưu vào Photos (fire-and-forget, lỗi được báo qua handleSaveResult)
+                UIImageWriteToSavedPhotosAlbum(
+                    image,
+                    self,
+                    #selector(handleSaveResult(_:didFinishSavingWithError:contextInfo:)),
+                    nil
+                )
+                result = fileData
+            } else {
                 self.errorMessage = "Lỗi xử lý file ảnh."
-                return
+                result = nil
             }
 
-            // FIX: Thêm selector callback để xử lý lỗi lưu ảnh (ví dụ: thiếu quyền).
-            // Nếu dùng nil,nil,nil thì lỗi sẽ bị nuốt im lặng.
-            UIImageWriteToSavedPhotosAlbum(
-                image,
-                self,
-                #selector(handleSaveResult(_:didFinishSavingWithError:contextInfo:)),
-                nil
-            )
+            // Resume continuation — luôn chạy dù result là nil để tránh deadlock.
+            self.captureContinuation?.resume(returning: result)
+            self.captureContinuation = nil
         }
     }
 
@@ -281,9 +303,9 @@ extension LiveKitCameraService: AVCapturePhotoCaptureDelegate {
                 // Thường gặp: NSPhotoLibraryAddUsageDescription chưa được khai báo
                 // hoặc user từ chối quyền truy cập thư viện ảnh.
                 self.errorMessage = "Không thể lưu ảnh: \(error.localizedDescription)"
-                print("❌ Lưu ảnh thất bại: \(error)")
+                cameraLogger.error("❌ Lưu ảnh thất bại: \(error)")
             } else {
-                print("✅ Đã lưu ảnh vào thư viện thành công!")
+                cameraLogger.info("✅ Đã lưu ảnh vào thư viện thành công")
             }
         }
     }
@@ -298,8 +320,23 @@ extension LiveKitCameraService: RoomDelegate {
         didUpdateConnectionState state: ConnectionState,
         from oldState: ConnectionState
     ) {
+        cameraLogger.debug("🔄 Camera connection: \(String(describing: oldState)) → \(String(describing: state))")
         if state == .disconnected {
             Task { @MainActor in self.isConnected = false }
+        }
+    }
+
+    // Được gọi khi local participant publish một track thành công.
+    // Resume continuation để startPublishingCamera() không cần polling.
+    nonisolated func room(_ room: Room,
+                          localParticipant: LocalParticipant,
+                          didPublishTrack publication: LocalTrackPublication) {
+        guard let videoTrack = publication.track as? LocalVideoTrack else { return }
+        cameraLogger.debug("📡 Local camera track published via delegate")
+        Task { @MainActor in
+            guard let cont = self.trackReadyContinuation else { return }
+            cont.resume(returning: videoTrack)
+            self.trackReadyContinuation = nil
         }
     }
 
@@ -315,7 +352,7 @@ extension LiveKitCameraService: RoomDelegate {
                           encryptionType: EncryptionType) {
         guard topic == "camera_control",
               let command = String(data: data, encoding: .utf8) else { return }
-        print("📨 Nhận lệnh từ viewer: \(command)")
+        cameraLogger.debug("📨 Nhận lệnh từ viewer: \(command)")
         if command == "switch_camera" {
             Task { @MainActor in self.switchCamera() }
         }

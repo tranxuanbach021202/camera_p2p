@@ -9,18 +9,15 @@ import SwiftUI
 import LiveKit
 
 struct ContentView: View {
-    
-    private let serverURL = "Test"
-       private let cameraToken = "Test"
-       private let viewerToken = "Test"
-       
-    
+
     var body: some View {
         ModeSelectionView(
-                    serverURL: serverURL,
-                    cameraToken: cameraToken,
-                    viewerToken: viewerToken
-                )
+            serverURL:        Config.LiveKit.serverURL,
+            cameraToken:      Config.LiveKit.cameraToken,
+            viewerToken:      Config.LiveKit.viewerToken,
+            telegramBotToken: Config.Telegram.botToken,
+            telegramChatId:   Config.Telegram.chatId
+        )
     }
 }
 

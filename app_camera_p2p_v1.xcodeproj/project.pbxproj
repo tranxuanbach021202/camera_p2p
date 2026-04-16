@@ -12,12 +12,27 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		68BC25F52F8FEC0E00C9F868 /* app_camera_p2p_v1.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = app_camera_p2p_v1.xcodeproj; sourceTree = "<group>"; };
+		68BC262E2F8FF0BA00C9F868 /* app_camera_p2p_v1.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = app_camera_p2p_v1.xcodeproj; sourceTree = "<group>"; };
 		BBFE1A1E2F8DDA49007C6575 /* app_camera_p2p_v1.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = app_camera_p2p_v1.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		BBFE2A002F8DDA49007C6575 /* Exclude .claude worktrees */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				.claude,
+			);
+			target = BBFE1A1D2F8DDA49007C6575 /* app_camera_p2p_v1 */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		BBFE1A202F8DDA49007C6575 /* app_camera_p2p_v1 */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				BBFE2A002F8DDA49007C6575 /* Exclude .claude worktrees */,
+			);
 			path = app_camera_p2p_v1;
 			sourceTree = "<group>";
 		};
@@ -36,6 +51,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		68BC25FA2F8FEC0E00C9F868 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		68BC263E2F8FF0BA00C9F868 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 		BBFE1A152F8DDA49007C6575 = {
 			isa = PBXGroup;
 			children = (
@@ -110,6 +139,16 @@
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BBFE1A1F2F8DDA49007C6575 /* Products */;
 			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = 68BC263E2F8FF0BA00C9F868 /* Products */;
+					ProjectRef = 68BC262E2F8FF0BA00C9F868 /* app_camera_p2p_v1.xcodeproj */;
+				},
+				{
+					ProductGroup = 68BC25FA2F8FEC0E00C9F868 /* Products */;
+					ProjectRef = 68BC25F52F8FEC0E00C9F868 /* app_camera_p2p_v1.xcodeproj */;
+				},
+			);
 			projectRoot = "";
 			targets = (
 				BBFE1A1D2F8DDA49007C6575 /* app_camera_p2p_v1 */,
