@@ -321,7 +321,13 @@ class LiveKitCameraService: NSObject, ObservableObject {
         do {
             try device.lockForConfiguration()
             device.activeFormat = bestFormat
+            // Switching activeFormat resets frame duration to the format's default (thường 30fps).
+            // Phải set lại thủ công để giữ đúng 15fps mà LiveKit đã config.
+            let frameDuration = CMTime(value: 1, timescale: CMTimeScale(minFps))
+            device.activeVideoMinFrameDuration = frameDuration
+            device.activeVideoMaxFrameDuration = frameDuration
             device.unlockForConfiguration()
+            cameraLogger.info("📸 [Plan1] Format switched, fps locked at \(Int(minFps))fps")
         } catch {
             cameraLogger.error("❌ [Plan1] Không thể switch format: \(error)")
         }
