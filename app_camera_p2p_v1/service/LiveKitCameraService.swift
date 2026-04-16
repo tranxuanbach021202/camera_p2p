@@ -104,7 +104,14 @@ class LiveKitCameraService: NSObject, ObservableObject {
                 defaultCameraCaptureOptions: CameraCaptureOptions(
                     position: .front,
                     dimensions: .h480_43,
-                    fps: 24
+                    fps: 15                   // 15fps — tiết kiệm ~30% pin encode so với 24fps
+                ),
+                defaultVideoPublishOptions: VideoPublishOptions(
+                    encoding: VideoEncoding(
+                        maxBitrate: 300_000,  // 300kbps — ổn định trên 4G yếu
+                        maxFps: 15
+                    ),
+                    simulcast: false          // tắt simulcast — không cần multi-layer khi chỉ có 1 viewer
                 )
             )
 
@@ -238,15 +245,23 @@ class LiveKitCameraService: NSObject, ObservableObject {
         if session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
 
-            // FIX: isHighResolutionCaptureEnabled deprecated từ iOS 16.
-            // Trên iOS 16+ hệ thống tự dùng full resolution, không cần set.
-            if #unavailable(iOS 16.0) {
+            if #available(iOS 16.0, *) {
+                // supportedMaxPhotoDimensions nằm trên activeFormat của device, không phải output.
+                let dims = capturer.device?.activeFormat.supportedMaxPhotoDimensions ?? []
+                let maxDim = dims.max { a, b in
+                    let aPixels = Int64(a.width) * Int64(a.height)
+                    let bPixels = Int64(b.width) * Int64(b.height)
+                    return aPixels < bPixels
+                }
+                if let maxDim {
+                    photoOutput.maxPhotoDimensions = maxDim
+                    cameraLogger.info("📸 Max photo dimensions available: \(maxDim.width)×\(maxDim.height)")
+                }
+            } else {
                 photoOutput.isHighResolutionCaptureEnabled = true
             }
 
-            if #available(iOS 13.0, *) {
-                photoOutput.maxPhotoQualityPrioritization = .quality
-            }
+            photoOutput.maxPhotoQualityPrioritization = .quality
 
             cameraLogger.debug("✅ Đã inject AVCapturePhotoOutput vào LiveKit session")
         }
@@ -269,8 +284,12 @@ class LiveKitCameraService: NSObject, ObservableObject {
         let settings = AVCapturePhotoSettings()
         settings.photoQualityPrioritization = self.photoOutput.maxPhotoQualityPrioritization
 
-        // FIX: isHighResolutionPhotoEnabled deprecated từ iOS 16.
-        if #unavailable(iOS 16.0) {
+        if #available(iOS 16.0, *) {
+            // maxPhotoDimensions đã được set trong setupPhotoOutput(), đọc lại để dùng.
+            let maxDim = photoOutput.maxPhotoDimensions
+            settings.maxPhotoDimensions = maxDim
+            cameraLogger.debug("📸 Chụp ảnh tại \(maxDim.width)×\(maxDim.height)")
+        } else {
             if photoOutput.isHighResolutionCaptureEnabled {
                 settings.isHighResolutionPhotoEnabled = true
             }

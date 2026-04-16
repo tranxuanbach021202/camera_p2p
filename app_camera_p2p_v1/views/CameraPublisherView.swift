@@ -212,20 +212,20 @@ struct CameraPublisherView: View {
                         VStack(spacing: 24) {
                             Image(systemName: "lock.fill")
                                 .font(.system(size: 52))
-                                .foregroundColor(.white.opacity(0.35))
+                                .foregroundColor(.white.opacity(0.1))
 
                             Text("Màn hình đã khoá")
                                 .font(.headline)
-                                .foregroundColor(.white.opacity(0.35))
+                                .foregroundColor(.white.opacity(0.1))
 
                             Text("Nhấn giữ 5 giây để mở khoá")
                                 .font(.caption)
-                                .foregroundColor(.white.opacity(0.25))
+                                .foregroundColor(.white.opacity(0.1))
 
                             // Vòng tròn tiến trình mở khoá
                             ZStack {
                                 Circle()
-                                    .stroke(Color.white.opacity(0.15), lineWidth: 5)
+                                    .stroke(Color.white.opacity(0.1), lineWidth: 5)
                                 Circle()
                                     .trim(from: 0, to: unlockProgress)
                                     .stroke(Color.white.opacity(isHoldingToUnlock ? 0.9 : 0), lineWidth: 5)
@@ -233,7 +233,7 @@ struct CameraPublisherView: View {
                                     .animation(.linear(duration: 0.05), value: unlockProgress)
                                 Image(systemName: isHoldingToUnlock ? "lock.open.fill" : "lock.fill")
                                     .font(.system(size: 22))
-                                    .foregroundColor(.white.opacity(isHoldingToUnlock ? 0.9 : 0.3))
+                                    .foregroundColor(.white.opacity(isHoldingToUnlock ? 0.9 : 0.1))
                             }
                             .frame(width: 70, height: 70)
                             .padding(.top, 8)
