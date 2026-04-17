@@ -23,6 +23,7 @@ struct CameraPublisherView: View {
     @State private var unlockProgress: CGFloat = 0
     @State private var unlockTimer: Timer? = nil
     @State private var isHoldingToUnlock: Bool = false
+    @State private var savedBrightness: CGFloat = UIScreen.main.brightness
 
     init(serverURL: String, cameraToken: String, telegramBotToken: String, telegramChatId: String) {
         _service = StateObject(wrappedValue: LiveKitCameraService(
@@ -151,6 +152,8 @@ struct CameraPublisherView: View {
 
                             // Nút khoá màn hình
                             Button {
+                                savedBrightness = UIScreen.main.brightness
+                                UIScreen.main.brightness = 0
                                 withAnimation(.easeInOut(duration: 0.3)) { isScreenLocked = true }
                             } label: {
                                 Image(systemName: "lock.fill")
@@ -305,6 +308,7 @@ struct CameraPublisherView: View {
                 if elapsed >= 5.0 {
                     timer.invalidate()
                     unlockTimer = nil
+                    UIScreen.main.brightness = savedBrightness
                     withAnimation(.easeInOut(duration: 0.3)) {
                         isScreenLocked = false
                         unlockProgress = 0

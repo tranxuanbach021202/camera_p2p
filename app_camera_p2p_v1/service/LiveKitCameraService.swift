@@ -176,6 +176,7 @@ class LiveKitCameraService: NSObject, ObservableObject {
         self.cameraTrack = track
         setupPhotoOutput()
         isPublishing = true
+        UIApplication.shared.isIdleTimerDisabled = true  // Ngăn iOS auto-lock khi đang stream
         cameraLogger.info("✅ Camera publishing started")
 
         // Bật microphone cùng lúc với camera
@@ -198,6 +199,7 @@ class LiveKitCameraService: NSObject, ObservableObject {
         cameraTrack = nil
         isPublishing = false
         isMicEnabled = false
+        UIApplication.shared.isIdleTimerDisabled = false  // Cho phép iOS auto-lock trở lại
     }
 
     func toggleMicrophone() {
