@@ -1,0 +1,20 @@
+# Credentials — không commit lên Git
+app_camera_p2p_v1/Config.swift
+
+# Xcode
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Claude worktrees
+app_camera_p2p_v1/.claude/

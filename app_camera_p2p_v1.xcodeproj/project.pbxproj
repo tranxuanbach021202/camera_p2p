@@ -13,6 +13,7 @@
 
 /* Begin PBXFileReference section */
 		68BC25F52F8FEC0E00C9F868 /* app_camera_p2p_v1.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = app_camera_p2p_v1.xcodeproj; sourceTree = "<group>"; };
+		68BC262E2F8FF0BA00C9F868 /* app_camera_p2p_v1.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = app_camera_p2p_v1.xcodeproj; sourceTree = "<group>"; };
 		BBFE1A1E2F8DDA49007C6575 /* app_camera_p2p_v1.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = app_camera_p2p_v1.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -51,6 +52,13 @@
 
 /* Begin PBXGroup section */
 		68BC25FA2F8FEC0E00C9F868 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		68BC263E2F8FF0BA00C9F868 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 			);
@@ -132,6 +140,10 @@
 			productRefGroup = BBFE1A1F2F8DDA49007C6575 /* Products */;
 			projectDirPath = "";
 			projectReferences = (
+				{
+					ProductGroup = 68BC263E2F8FF0BA00C9F868 /* Products */;
+					ProjectRef = 68BC262E2F8FF0BA00C9F868 /* app_camera_p2p_v1.xcodeproj */;
+				},
 				{
 					ProductGroup = 68BC25FA2F8FEC0E00C9F868 /* Products */;
 					ProjectRef = 68BC25F52F8FEC0E00C9F868 /* app_camera_p2p_v1.xcodeproj */;
@@ -293,6 +305,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 83CBK546FB;
 				ENABLE_PREVIEWS = YES;
+				EXCLUDED_SOURCE_FILE_NAMES = ".claude/**";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "app-camera-p2p-v1-Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Ứng dụng cần truy cập Camera để chụp ảnh đại diện";
@@ -329,6 +342,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 83CBK546FB;
 				ENABLE_PREVIEWS = YES;
+				EXCLUDED_SOURCE_FILE_NAMES = ".claude/**";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "app-camera-p2p-v1-Info.plist";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Ứng dụng cần truy cập Camera để chụp ảnh đại diện";
