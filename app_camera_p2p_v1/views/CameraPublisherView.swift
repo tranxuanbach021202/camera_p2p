@@ -10,7 +10,8 @@ import Combine
 struct CameraPublisherView: View {
 
     @StateObject private var service: LiveKitCameraService
-    @StateObject private var telegramService: TelegramService
+    @StateObject private var imageStreamService: ImageStreamService
+    // @StateObject private var telegramService: TelegramService
 
     @State private var isCapturing: Bool = false
     @State private var baseZoom: CGFloat = 1.0
@@ -25,21 +26,21 @@ struct CameraPublisherView: View {
     @State private var isHoldingToUnlock: Bool = false
     @State private var savedBrightness: CGFloat = UIScreen.main.brightness
 
-    init(serverURL: String, cameraToken: String, telegramBotToken: String, telegramChatId: String) {
+    init(serverURL: String, cameraToken: String) {
         _service = StateObject(wrappedValue: LiveKitCameraService(
             serverURL: serverURL,
             token: cameraToken,
             roomName: "alfred-room"
         ))
-        _telegramService = StateObject(wrappedValue: TelegramService(
-            botToken: telegramBotToken,
-            chatId: telegramChatId
-        ))
+        _imageStreamService = StateObject(wrappedValue: ImageStreamService())
+        // _telegramService = StateObject(wrappedValue: TelegramService(
+        //     botToken: telegramBotToken,
+        //     chatId: telegramChatId
+        // ))
     }
 
-    // Nút bị khoá khi đang chụp ảnh, đang switch camera, hoặc đang gửi Telegram.
     private var isLocked: Bool {
-        isCapturing || service.isSwitchingCamera || telegramService.isSending
+        isCapturing || service.isSwitchingCamera || imageStreamService.isSending
     }
 
     var body: some View {
@@ -190,8 +191,8 @@ struct CameraPublisherView: View {
                 .padding(.bottom, 8)
             }
 
-            // MARK: Loading Overlay (chụp ảnh + gửi Telegram)
-            if isCapturing || telegramService.isSending {
+            // MARK: Loading Overlay (chụp ảnh + upload)
+            if isCapturing || imageStreamService.isSending {
                 ZStack {
                     Color.black.opacity(0.6)
                         .edgesIgnoringSafeArea(.all)
@@ -201,7 +202,7 @@ struct CameraPublisherView: View {
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             .scaleEffect(1.5)
 
-                        Text(telegramService.isSending ? "Đang gửi Telegram..." : "Đang lưu ảnh...")
+                        Text(imageStreamService.isSending ? "Đang upload ảnh..." : "Đang chụp ảnh...")
                             .font(.system(size: 16, weight: .medium))
                             .foregroundColor(.white)
                     }
@@ -257,12 +258,12 @@ struct CameraPublisherView: View {
         .statusBarHidden(isScreenLocked)
         .onAppear {
             // Gán callback: mọi ảnh chụp (local hoặc remote từ viewer) đều đi qua đây
-            service.onPhotoReady = { [telegramService] data in
-                guard telegramService.isConfigured else { return }
-                let f = DateFormatter()
-                f.dateFormat = "dd/MM/yyyy HH:mm:ss"
-                let caption = "📷 Camera P2P — \(f.string(from: Date()))"
-                await telegramService.sendPhoto(data, caption: caption)
+            service.onPhotoReady = { [imageStreamService] data in
+                await imageStreamService.uploadPhoto(data)
+                // Telegram tạm comment
+                // guard telegramService.isConfigured else { return }
+                // let caption = "📷 Camera P2P — \(f.string(from: Date()))"
+                // await telegramService.sendPhoto(data, caption: caption)
             }
             Task {
                 await service.connect()
@@ -279,10 +280,10 @@ struct CameraPublisherView: View {
         } message: {
             Text(service.errorMessage ?? "")
         }
-        .alert("Telegram", isPresented: .constant(telegramService.lastError != nil)) {
-            Button("OK") { telegramService.lastError = nil }
+        .alert("Upload Error", isPresented: .constant(imageStreamService.lastError != nil)) {
+            Button("OK") { imageStreamService.lastError = nil }
         } message: {
-            Text(telegramService.lastError ?? "")
+            Text(imageStreamService.lastError ?? "")
         }
     }
 

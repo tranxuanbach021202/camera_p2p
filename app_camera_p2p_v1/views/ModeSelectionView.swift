@@ -17,8 +17,8 @@ struct ModeSelectionView: View {
     let serverURL: String
     let cameraToken: String
     let viewerToken: String
-    let telegramBotToken: String
-    let telegramChatId: String
+    // let telegramBotToken: String
+    // let telegramChatId: String
     
     @State private var selectedMode: AppMode? = nil
     
@@ -81,9 +81,7 @@ struct ModeSelectionView: View {
                 case .camera:
                     CameraPublisherView(
                         serverURL: serverURL,
-                        cameraToken: cameraToken,
-                        telegramBotToken: telegramBotToken,
-                        telegramChatId: telegramChatId
+                        cameraToken: cameraToken
                     )
                     .navigationBarBackButtonHidden(false)
                     
