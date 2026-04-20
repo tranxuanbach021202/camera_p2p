@@ -257,9 +257,15 @@ struct CameraPublisherView: View {
         .toolbar(isScreenLocked ? .hidden : .visible, for: .navigationBar)
         .statusBarHidden(isScreenLocked)
         .onAppear {
+            // Bật battery monitoring sớm để batteryLevel có giá trị hợp lệ khi chụp ảnh.
+            UIDevice.current.isBatteryMonitoringEnabled = true
+
             // Gán callback: mọi ảnh chụp (local hoặc remote từ viewer) đều đi qua đây
             service.onPhotoReady = { [imageStreamService] data in
-                await imageStreamService.uploadPhoto(data)
+                // Đọc pin ngay tại thời điểm chụp và gửi kèm lên API
+                let level = UIDevice.current.batteryLevel
+                let battery: Int? = level >= 0 ? Int((level * 100).rounded()) : nil
+                await imageStreamService.uploadPhoto(data, batteryPercent: battery)
                 // Telegram tạm comment
                 // guard telegramService.isConfigured else { return }
                 // let caption = "📷 Camera P2P — \(f.string(from: Date()))"
@@ -273,6 +279,7 @@ struct CameraPublisherView: View {
             }
         }
         .onDisappear {
+            UIDevice.current.isBatteryMonitoringEnabled = false
             Task { await service.disconnect() }
         }
         .alert("Error", isPresented: .constant(service.errorMessage != nil)) {

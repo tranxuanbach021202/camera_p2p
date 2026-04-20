@@ -104,12 +104,12 @@ class LiveKitCameraService: NSObject, ObservableObject {
                 defaultCameraCaptureOptions: CameraCaptureOptions(
                     position: .front,
                     dimensions: .h480_43,
-                    fps: 5            //Hard Code Fps       // 15fps — tiết kiệm ~30% pin encode so với 24fps
+                    fps: 3            //Hard Code Fps       // 15fps — tiết kiệm ~30% pin encode so với 24fps
                 ),
                 defaultVideoPublishOptions: VideoPublishOptions(
                     encoding: VideoEncoding(
                         maxBitrate: 300_000,  // 300kbps — ổn định trên 4G yếu
-                        maxFps: 5 //Hard code FPS
+                        maxFps: 3 //Hard code FPS
                     ),
                     simulcast: false          // tắt simulcast — không cần multi-layer khi chỉ có 1 viewer
                 )
@@ -286,7 +286,7 @@ class LiveKitCameraService: NSObject, ObservableObject {
         // h480_43 = 640×480 — format phải hỗ trợ ít nhất kích thước này để LiveKit có thể stream
         let minVideoWidth: Int32  = 640
         let minVideoHeight: Int32 = 480
-        let minFps: Float64       = 5.0 //Hard code FPS
+        let minFps: Float64       = 3.0 //Hard code FPS
 
         var bestFormat: AVCaptureDevice.Format?
         var bestPhotoPixels: Int64 = 0

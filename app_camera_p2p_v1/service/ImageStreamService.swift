@@ -24,8 +24,11 @@ class ImageStreamService: ObservableObject {
     // MARK: - Upload
 
     /// Upload ảnh JPEG lên ImageStream API.
-    /// Tương đương với đoạn JS dùng `request` + `formData`.
-    func uploadPhoto(_ imageData: Data, filename: String? = nil) async {
+    /// - Parameters:
+    ///   - imageData: Dữ liệu JPEG của ảnh.
+    ///   - filename: Tên file tuỳ chọn; mặc định dùng timestamp.
+    ///   - batteryPercent: Phần trăm pin thiết bị camera (0–100); nil nếu không xác định.
+    func uploadPhoto(_ imageData: Data, filename: String? = nil, batteryPercent: Int? = nil) async {
         guard let url = URL(string: uploadURL) else {
             lastError = "URL không hợp lệ."
             return
@@ -35,10 +38,11 @@ class ImageStreamService: ObservableObject {
         lastError = nil
 
         let fname = filename ?? "photo_\(Int(Date().timeIntervalSince1970)).jpg"
-        imageStreamLogger.debug("📤 Đang upload ảnh lên ImageStream API (\(fname))...")
+        let batteryLog = batteryPercent.map { "\($0)%" } ?? "N/A"
+        imageStreamLogger.debug("📤 Đang upload ảnh lên ImageStream API (\(fname), pin: \(batteryLog))...")
 
         do {
-            let request = buildRequest(url: url, imageData: imageData, filename: fname)
+            let request = buildRequest(url: url, imageData: imageData, filename: fname, batteryPercent: batteryPercent)
             let (data, response) = try await URLSession.shared.data(for: request)
 
             guard let http = response as? HTTPURLResponse else {
@@ -62,7 +66,7 @@ class ImageStreamService: ObservableObject {
 
     // MARK: - Private
 
-    private func buildRequest(url: URL, imageData: Data, filename: String) -> URLRequest {
+    private func buildRequest(url: URL, imageData: Data, filename: String, batteryPercent: Int?) -> URLRequest {
         let boundary = "Boundary-\(UUID().uuidString)"
 
         var request = URLRequest(url: url)
@@ -74,12 +78,21 @@ class ImageStreamService: ObservableObject {
 
         var body = Data()
 
-        // field: image (file binary) — tương đương formData.image trong JS
+        // field: image (file binary)
         body.append("--\(boundary)\r\n")
         body.append("Content-Disposition: form-data; name=\"image\"; filename=\"\(filename)\"\r\n")
         body.append("Content-Type: image/jpeg\r\n\r\n")
         body.append(imageData)
         body.append("\r\n")
+
+        // field: battery (text) — phần trăm pin, gửi kèm khi có giá trị hợp lệ
+        if let battery = batteryPercent {
+            body.append("--\(boundary)\r\n")
+            body.append("Content-Disposition: form-data; name=\"battery\"\r\n\r\n")
+            body.append("\(battery)")
+            body.append("\r\n")
+        }
+
         body.append("--\(boundary)--\r\n")
 
         request.httpBody = body
