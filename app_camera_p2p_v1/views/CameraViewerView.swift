@@ -18,6 +18,7 @@ struct CameraViewerView: View {
     @StateObject private var service: LiveKitViewerService
     @Environment(\.dismiss) private var dismiss
     @State private var baseZoom: CGFloat = 1.0
+    @State private var showMicPicker = false
     
     init(serverURL: String, viewerToken: String) {
         _service = StateObject(wrappedValue: LiveKitViewerService(
@@ -99,6 +100,33 @@ struct CameraViewerView: View {
                                 Image(systemName: service.isSpeakerEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
                                     .font(.system(size: 20))
                                     .foregroundStyle(service.isSpeakerEnabled ? .white : .red)
+                            }
+                        }
+
+                        // Nút chọn mic Bluetooth — chỉ hiện khi camera có ≥1 Bluetooth HFP
+                        if !service.availableMics.isEmpty {
+                            Button {
+                                showMicPicker = true
+                            } label: {
+                                ZStack {
+                                    Circle()
+                                        .fill(.ultraThinMaterial)
+                                        .frame(width: 56, height: 56)
+                                    Image(systemName: "mic.fill")
+                                        .font(.system(size: 20))
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                            .confirmationDialog("Chọn microphone", isPresented: $showMicPicker, titleVisibility: .visible) {
+                                ForEach(service.availableMics) { mic in
+                                    Button {
+                                        Task { await service.sendSelectMicCommand(uid: mic.uid) }
+                                    } label: {
+                                        // Dấu checkmark cho mic đang active
+                                        Text(mic.active ? "✓  \(mic.name)" : mic.name)
+                                    }
+                                }
+                                Button("Huỷ", role: .cancel) {}
                             }
                         }
 

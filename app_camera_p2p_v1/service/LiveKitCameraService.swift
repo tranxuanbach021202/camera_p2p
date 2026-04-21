@@ -47,6 +47,9 @@ class LiveKitCameraService: NSObject, ObservableObject {
     // MARK: - Microphone State
     @Published var isMicEnabled: Bool = false
 
+    // MARK: - Mic Selection
+    private var routeChangeObserver: NSObjectProtocol?
+
     init(serverURL: String, token: String, roomName: String) {
         self.serverURL = serverURL
         self.token = token
@@ -125,6 +128,8 @@ class LiveKitCameraService: NSObject, ObservableObject {
             self.room = newRoom
             self.isConnected = true
             cameraLogger.info("✅ Connected to room: \(self.roomName)")
+            self.setupRouteChangeObserver()
+            Task { await self.sendMicList() }
 
         } catch {
             cameraLogger.error("❌ connect() threw: \(String(describing: error))")
@@ -226,6 +231,10 @@ class LiveKitCameraService: NSObject, ObservableObject {
         await room?.disconnect()
         isConnected = false
         room = nil
+        if let observer = routeChangeObserver {
+            NotificationCenter.default.removeObserver(observer)
+            routeChangeObserver = nil
+        }
     }
 
     // MARK: - Photo Output Setup
@@ -479,6 +488,94 @@ extension LiveKitCameraService: RoomDelegate {
         } else if command.hasPrefix("zoom:"),
                   let factor = Double(command.dropFirst(5)) {
             Task { @MainActor in self.setZoom(factor: CGFloat(factor)) }
+        } else if command.hasPrefix("mic:") {
+            let uid = String(command.dropFirst(4))
+            Task { @MainActor in self.switchToMic(uid: uid) }
+        } else if command == "request_mic_list" {
+            Task { @MainActor in await self.sendMicList() }
+        }
+    }
+}
+
+// MARK: - Mic Selection
+
+private struct MicPayload: Encodable {
+    let uid: String
+    let name: String
+    let active: Bool
+}
+
+extension LiveKitCameraService {
+
+    /// Đăng ký lắng nghe thay đổi audio route (cắm/tháo Bluetooth).
+    /// Mỗi khi route thay đổi → push danh sách mic mới tới viewer.
+    func setupRouteChangeObserver() {
+        routeChangeObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.sendMicList()
+            }
+        }
+    }
+
+    /// Đọc danh sách input từ AVAudioSession và gửi tới viewer qua data channel.
+    /// Chỉ gửi khi có ít nhất 1 thiết bị Bluetooth HFP (tức là có lựa chọn thực sự).
+    func sendMicList() async {
+        guard let room = room, isConnected else { return }
+
+        let session = AVAudioSession.sharedInstance()
+        let inputs   = session.availableInputs ?? []
+        let activeUID = session.currentRoute.inputs.first?.uid ?? ""
+
+        // Lấy tất cả: Bluetooth HFP + Built-in Mic
+        let candidates = inputs.filter {
+            $0.portType == .bluetoothHFP || $0.portType == .builtInMic
+        }
+
+        // Không gửi nếu chỉ có built-in (không có gì để chọn)
+        guard candidates.contains(where: { $0.portType == .bluetoothHFP }) else { return }
+
+        let payloads = candidates.map {
+            MicPayload(uid: $0.uid, name: $0.portName, active: $0.uid == activeUID)
+        }
+
+        guard let jsonData = try? JSONEncoder().encode(payloads),
+              let jsonStr  = String(data: jsonData, encoding: .utf8),
+              let data     = "mic_list:\(jsonStr)".data(using: .utf8) else { return }
+
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+        cameraLogger.debug("🎙️ Đã gửi mic list (\(candidates.count) thiết bị, active: \(activeUID))")
+    }
+
+    /// Chuyển sang mic có UID tương ứng, sau đó restart LiveKit audio track.
+    func switchToMic(uid: String) {
+        let session = AVAudioSession.sharedInstance()
+        guard let input = session.availableInputs?.first(where: { $0.uid == uid }) else {
+            cameraLogger.warning("⚠️ switchToMic: không tìm thấy UID \(uid)")
+            return
+        }
+        do {
+            try session.setPreferredInput(input)
+            cameraLogger.info("🎙️ Đã chọn mic: \(input.portName)")
+        } catch {
+            cameraLogger.error("❌ setPreferredInput thất bại: \(error)")
+            return
+        }
+
+        // Restart LiveKit mic track để WebRTC engine nhận nguồn âm mới.
+        // Chỉ restart nếu mic đang bật; nếu tắt thì thay đổi sẽ có hiệu lực khi bật lại.
+        guard isMicEnabled, let room = room else { return }
+        Task {
+            try? await room.localParticipant.setMicrophone(enabled: false)
+            try? await Task.sleep(nanoseconds: 300_000_000)  // 0.3 s buffer
+            try? await room.localParticipant.setMicrophone(enabled: true)
+            await sendMicList()  // Push trạng thái mới về viewer
         }
     }
 }

@@ -11,6 +11,15 @@ import os
 
 private let viewerLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.camera_p2p", category: "ViewerService")
 
+// MARK: - Mic Info Model
+
+struct MicInfo: Identifiable, Decodable, Equatable {
+    let uid: String
+    let name: String
+    let active: Bool
+    var id: String { uid }
+}
+
 @MainActor
 class LiveKitViewerService: ObservableObject {
     
@@ -23,6 +32,8 @@ class LiveKitViewerService: ObservableObject {
     @Published var isSpeakerEnabled: Bool = true
     @Published var errorMessage: String?
     @Published private(set) var remoteVideoTrack: VideoTrack?
+    /// Danh sách mic nhận từ camera qua data channel (chỉ có khi có Bluetooth HFP).
+    @Published var availableMics: [MicInfo] = []
     
     private var room: Room?
     let serverURL: String
@@ -184,6 +195,8 @@ extension LiveKitViewerService: RoomDelegate {
         Task { @MainActor in
             self.remoteVideoTrack = videoTrack
             self.isReceiving = true
+            // Yêu cầu camera gửi danh sách mic ngay khi nhận được stream
+            await self.requestMicList()
         }
     }
 
@@ -216,5 +229,52 @@ extension LiveKitViewerService: RoomDelegate {
         Task { @MainActor in
             self.errorMessage = "Failed to connect: \(msg)"
         }
+    }
+
+    /// Nhận data từ camera — xử lý mic_list push từ camera.
+    nonisolated func room(_ room: Room,
+                          participant: RemoteParticipant?,
+                          didReceiveData data: Data,
+                          forTopic topic: String,
+                          encryptionType: EncryptionType) {
+        guard topic == "camera_control",
+              let command = String(data: data, encoding: .utf8) else { return }
+
+        if command.hasPrefix("mic_list:") {
+            let jsonStr = String(command.dropFirst(9))
+            guard let jsonData = jsonStr.data(using: .utf8),
+                  let mics = try? JSONDecoder().decode([MicInfo].self, from: jsonData) else {
+                viewerLogger.warning("⚠️ Không parse được mic_list JSON")
+                return
+            }
+            viewerLogger.debug("🎙️ Nhận mic list: \(mics.count) thiết bị")
+            Task { @MainActor in self.availableMics = mics }
+        }
+    }
+}
+
+// MARK: - Mic Control
+
+extension LiveKitViewerService {
+
+    /// Yêu cầu camera gửi lại danh sách mic hiện tại.
+    func requestMicList() async {
+        guard let room = room, isConnected else { return }
+        guard let data = "request_mic_list".data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+    }
+
+    /// Gửi lệnh chọn mic tới camera theo UID.
+    func sendSelectMicCommand(uid: String) async {
+        guard let room = room, isConnected else { return }
+        guard let data = "mic:\(uid)".data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+        viewerLogger.debug("📤 Đã gửi lệnh chọn mic: \(uid)")
     }
 }
