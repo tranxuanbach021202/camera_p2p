@@ -42,6 +42,8 @@ class LiveKitViewerService: ObservableObject {
     @Published var focusPoint: CGPoint? = nil
     /// Giá trị exposure bias đang được áp dụng trên camera (-2.0 ~ +2.0 EV).
     @Published var exposureBias: Float = 0.0
+    /// Chất lượng stream hiện tại, đồng bộ từ camera.
+    @Published var streamQuality: StreamQuality = .mid
     /// Viewer đã nhấn "Cho phép mở khoá" — camera cần cả cờ này lẫn giữ 5s.
     @Published var hasGrantedUnlock: Bool = false
     
@@ -272,6 +274,9 @@ extension LiveKitViewerService: RoomDelegate {
         } else if command.hasPrefix("exposure_state:"),
                   let bias = Float(command.dropFirst(15)) {
             Task { @MainActor in self.exposureBias = bias }
+        } else if command.hasPrefix("quality_state:"),
+                  let quality = StreamQuality(rawValue: String(command.dropFirst(14))) {
+            Task { @MainActor in self.streamQuality = quality }
         }
     }
 }
@@ -288,6 +293,17 @@ extension LiveKitViewerService {
             data: data,
             options: DataPublishOptions(topic: "camera_control", reliable: true)
         )
+    }
+
+    /// Gửi lệnh chuyển chất lượng stream (fps preset).
+    func sendQualityCommand(_ quality: StreamQuality) async {
+        guard let room = room, isConnected else { return }
+        guard let data = "quality:\(quality.rawValue)".data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+        viewerLogger.debug("📹 Gửi quality: \(quality.label)")
     }
 
     /// Gửi lệnh điều chỉnh exposure bias (-2.0 ~ +2.0 EV).

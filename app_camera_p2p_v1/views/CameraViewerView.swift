@@ -107,6 +107,13 @@ struct CameraViewerView: View {
 
                 // MARK: Bottom controls (chỉ hiện khi đang nhận stream)
                 if service.isReceiving {
+                    // Quality preset pills
+                    StreamQualityBar(current: service.streamQuality) { quality in
+                        Task { await service.sendQualityCommand(quality) }
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
+
                     // Exposure slider
                     ExposureBar(bias: service.exposureBias) { newBias in
                         Task { await service.sendExposureCommand(newBias) }
@@ -410,6 +417,41 @@ struct ExposureBar: View {
                     .font(.system(size: 12, weight: .medium, design: .monospaced))
                     .foregroundStyle(.yellow)
                     .frame(width: 36)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+// MARK: - Stream Quality Bar
+
+struct StreamQualityBar: View {
+    let current: StreamQuality
+    let onChange: (StreamQuality) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "dot.radiowaves.left.and.right")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.7))
+
+            ForEach(StreamQuality.allCases, id: \.self) { quality in
+                let isSelected = quality == current
+                Button {
+                    guard !isSelected else { return }
+                    onChange(quality)
+                } label: {
+                    Text(quality.label)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(isSelected ? .black : .white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(isSelected ? Color.white : Color.white.opacity(0.2),
+                                    in: Capsule())
+                }
+                .disabled(isSelected)
             }
         }
         .padding(.horizontal, 12)

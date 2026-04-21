@@ -12,6 +12,36 @@ import os
 
 private let cameraLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.camera_p2p", category: "CameraService")
 
+// MARK: - Stream Quality
+
+enum StreamQuality: String, CaseIterable {
+    case low  = "low"
+    case mid  = "mid"
+    case high = "high"
+
+    var label: String {
+        switch self {
+        case .low:  return "240p"
+        case .mid:  return "480p"
+        case .high: return "720p"
+        }
+    }
+    var fps: Int {
+        switch self {
+        case .low:  return 5
+        case .mid:  return 10
+        case .high: return 20
+        }
+    }
+    var maxBitrate: Int {
+        switch self {
+        case .low:  return 150_000
+        case .mid:  return 400_000
+        case .high: return 900_000
+        }
+    }
+}
+
 @MainActor
 class LiveKitCameraService: NSObject, ObservableObject {
 
@@ -52,6 +82,9 @@ class LiveKitCameraService: NSObject, ObservableObject {
     /// Viewer đã nhấn "cho phép mở khoá" — camera chỉ unlock được khi cờ này = true.
     @Published var isUnlockAllowed: Bool = false
     private var savedBrightness: CGFloat = UIScreen.main.brightness
+
+    // MARK: - Stream Quality
+    @Published var streamQuality: StreamQuality = .mid
 
     // MARK: - Mic Selection
     private var routeChangeObserver: NSObjectProtocol?
@@ -524,6 +557,9 @@ extension LiveKitCameraService: RoomDelegate {
         } else if command.hasPrefix("exposure:"),
                   let bias = Float(command.dropFirst(9)) {
             Task { @MainActor in self.setExposureBias(bias) }
+        } else if command.hasPrefix("quality:"),
+                  let quality = StreamQuality(rawValue: String(command.dropFirst(8))) {
+            Task { @MainActor in self.switchStreamQuality(quality) }
         }
     }
 }
@@ -690,6 +726,38 @@ extension LiveKitCameraService {
         guard let room = room else { return }
         let cmd = String(format: "exposure_state:%.2f", bias)
         guard let data = cmd.data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+    }
+
+    /// Chuyển chất lượng stream bằng cách khoá fps trên AVCaptureDevice.
+    /// Không thay đổi activeFormat để bảo toàn photo quality (plan1).
+    func switchStreamQuality(_ quality: StreamQuality) {
+        guard let track = cameraTrack,
+              let capturer = track.capturer as? CameraCapturer,
+              let device = capturer.device else { return }
+
+        do {
+            try device.lockForConfiguration()
+            let time = CMTime(value: 1, timescale: CMTimeScale(quality.fps))
+            device.activeVideoMinFrameDuration = time
+            device.activeVideoMaxFrameDuration = time
+            device.unlockForConfiguration()
+            streamQuality = quality
+            cameraLogger.info("📹 Stream quality → \(quality.label) @ \(quality.fps) fps")
+        } catch {
+            cameraLogger.error("❌ switchStreamQuality thất bại: \(error)")
+            return
+        }
+        Task { await sendQualityState(quality) }
+    }
+
+    private func sendQualityState(_ quality: StreamQuality) async {
+        guard let room = room else { return }
+        let command = "quality_state:\(quality.rawValue)"
+        guard let data = command.data(using: .utf8) else { return }
         try? await room.localParticipant.publish(
             data: data,
             options: DataPublishOptions(topic: "camera_control", reliable: true)
