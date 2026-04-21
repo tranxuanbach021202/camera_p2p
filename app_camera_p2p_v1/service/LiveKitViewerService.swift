@@ -34,6 +34,10 @@ class LiveKitViewerService: ObservableObject {
     @Published private(set) var remoteVideoTrack: VideoTrack?
     /// Danh sách mic nhận từ camera qua data channel (chỉ có khi có Bluetooth HFP).
     @Published var availableMics: [MicInfo] = []
+    /// Trạng thái khoá màn hình của camera, đồng bộ qua data channel.
+    @Published var isCameraLocked: Bool = false
+    /// Viewer đã nhấn "Cho phép mở khoá" — camera cần cả cờ này lẫn giữ 5s.
+    @Published var hasGrantedUnlock: Bool = false
     
     private var room: Room?
     let serverURL: String
@@ -249,6 +253,13 @@ extension LiveKitViewerService: RoomDelegate {
             }
             viewerLogger.debug("🎙️ Nhận mic list: \(mics.count) thiết bị")
             Task { @MainActor in self.availableMics = mics }
+        } else if command.hasPrefix("lock_state:") {
+            let locked = command.dropFirst(11) == "1"
+            viewerLogger.debug("🔒 Camera lock state: \(locked)")
+            Task { @MainActor in
+                self.isCameraLocked = locked
+                if !locked { self.hasGrantedUnlock = false }  // Camera đã mở → reset quyền
+            }
         }
     }
 }
@@ -276,5 +287,40 @@ extension LiveKitViewerService {
             options: DataPublishOptions(topic: "camera_control", reliable: true)
         )
         viewerLogger.debug("📤 Đã gửi lệnh chọn mic: \(uid)")
+    }
+
+    /// Gửi lệnh khoá màn hình camera.
+    func sendLockScreen() async {
+        guard let room = room, isConnected else { return }
+        guard let data = "lock_screen".data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+        viewerLogger.debug("🔒 Đã gửi lệnh lock_screen")
+    }
+
+    /// Cho phép camera mở khoá — camera vẫn cần giữ 5s để hoàn tất.
+    func sendAllowUnlock() async {
+        guard let room = room, isConnected else { return }
+        guard let data = "allow_unlock".data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+        hasGrantedUnlock = true
+        viewerLogger.debug("🔓 Đã gửi allow_unlock")
+    }
+
+    /// Huỷ quyền mở khoá đã cấp trước đó.
+    func sendRevokeUnlock() async {
+        guard let room = room, isConnected else { return }
+        guard let data = "revoke_unlock".data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+        hasGrantedUnlock = false
+        viewerLogger.debug("🔒 Đã gửi revoke_unlock")
     }
 }

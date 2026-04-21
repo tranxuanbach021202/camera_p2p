@@ -19,12 +19,10 @@ struct CameraPublisherView: View {
     // MARK: - Controls Visibility
     @State private var isControlsVisible: Bool = true
 
-    // MARK: - Screen Lock
-    @State private var isScreenLocked: Bool = false
+    // MARK: - Screen Lock (trạng thái khoá nằm trong service để data channel có thể điều khiển)
     @State private var unlockProgress: CGFloat = 0
     @State private var unlockTimer: Timer? = nil
     @State private var isHoldingToUnlock: Bool = false
-    @State private var savedBrightness: CGFloat = UIScreen.main.brightness
 
     init(serverURL: String, cameraToken: String) {
         _service = StateObject(wrappedValue: LiveKitCameraService(
@@ -153,9 +151,7 @@ struct CameraPublisherView: View {
 
                             // Nút khoá màn hình
                             Button {
-                                savedBrightness = UIScreen.main.brightness
-                                UIScreen.main.brightness = 0
-                                withAnimation(.easeInOut(duration: 0.3)) { isScreenLocked = true }
+                                withAnimation(.easeInOut(duration: 0.3)) { service.lockScreen() }
                             } label: {
                                 Image(systemName: "lock.fill")
                                     .font(.title2)
@@ -211,7 +207,7 @@ struct CameraPublisherView: View {
             }
 
             // MARK: Screen Lock Overlay
-            if isScreenLocked {
+            if service.isScreenLocked {
                 Color.black
                     .ignoresSafeArea()
                     .overlay {
@@ -224,26 +220,40 @@ struct CameraPublisherView: View {
                                 .font(.headline)
                                 .foregroundColor(.white.opacity(0.1))
 
-                            Text("Nhấn giữ 5 giây để mở khoá")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.1))
+                            if service.isUnlockAllowed {
+                                // Viewer đã cho phép — hiển thị hướng dẫn giữ 5s
+                                Text("Nhấn giữ 5 giây để mở khoá")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.5))
 
-                            // Vòng tròn tiến trình mở khoá
-                            ZStack {
-                                Circle()
-                                    .stroke(Color.white.opacity(0.1), lineWidth: 5)
-                                Circle()
-                                    .trim(from: 0, to: unlockProgress)
-                                    .stroke(Color.white.opacity(isHoldingToUnlock ? 0.9 : 0), lineWidth: 5)
-                                    .rotationEffect(.degrees(-90))
-                                    .animation(.linear(duration: 0.05), value: unlockProgress)
-                                Image(systemName: isHoldingToUnlock ? "lock.open.fill" : "lock.fill")
-                                    .font(.system(size: 22))
-                                    .foregroundColor(.white.opacity(isHoldingToUnlock ? 0.9 : 0.1))
+                                ZStack {
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.2), lineWidth: 5)
+                                    Circle()
+                                        .trim(from: 0, to: unlockProgress)
+                                        .stroke(Color.white.opacity(isHoldingToUnlock ? 0.9 : 0), lineWidth: 5)
+                                        .rotationEffect(.degrees(-90))
+                                        .animation(.linear(duration: 0.05), value: unlockProgress)
+                                    Image(systemName: isHoldingToUnlock ? "lock.open.fill" : "lock.fill")
+                                        .font(.system(size: 22))
+                                        .foregroundColor(.white.opacity(isHoldingToUnlock ? 0.9 : 0.4))
+                                }
+                                .frame(width: 70, height: 70)
+                                .padding(.top, 8)
+                            } else {
+                                // Chưa được phép — yêu cầu viewer cho phép trước
+                                Text("Yêu cầu app viewer cho phép mở khoá")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.3))
+                                    .multilineTextAlignment(.center)
+
+                                Image(systemName: "iphone.and.arrow.forward")
+                                    .font(.system(size: 28))
+                                    .foregroundColor(.white.opacity(0.15))
+                                    .padding(.top, 4)
                             }
-                            .frame(width: 70, height: 70)
-                            .padding(.top, 8)
                         }
+                        .padding(.horizontal, 32)
                     }
                     .gesture(
                         DragGesture(minimumDistance: 0)
@@ -253,9 +263,9 @@ struct CameraPublisherView: View {
                     .transition(.opacity)
             }
         }
-        .navigationBarBackButtonHidden(isScreenLocked)
-        .toolbar(isScreenLocked ? .hidden : .visible, for: .navigationBar)
-        .statusBarHidden(isScreenLocked)
+        .navigationBarBackButtonHidden(service.isScreenLocked)
+        .toolbar(service.isScreenLocked ? .hidden : .visible, for: .navigationBar)
+        .statusBarHidden(service.isScreenLocked)
         .onAppear {
             // Bật battery monitoring sớm để batteryLevel có giá trị hợp lệ khi chụp ảnh.
             UIDevice.current.isBatteryMonitoringEnabled = true
@@ -305,6 +315,8 @@ struct CameraPublisherView: View {
     // MARK: - Screen Lock Helpers
 
     private func startUnlockCountdown() {
+        // Điều kiện AND: viewer phải cho phép trước, camera mới được giữ 5s
+        guard service.isUnlockAllowed else { return }
         guard unlockTimer == nil else { return }
         isHoldingToUnlock = true
         let start = Date()
@@ -316,9 +328,8 @@ struct CameraPublisherView: View {
                 if elapsed >= 5.0 {
                     timer.invalidate()
                     unlockTimer = nil
-                    UIScreen.main.brightness = savedBrightness
                     withAnimation(.easeInOut(duration: 0.3)) {
-                        isScreenLocked = false
+                        service.unlockScreen()   // phục hồi brightness + notify viewer
                         unlockProgress = 0
                         isHoldingToUnlock = false
                     }

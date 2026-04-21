@@ -47,6 +47,12 @@ class LiveKitCameraService: NSObject, ObservableObject {
     // MARK: - Microphone State
     @Published var isMicEnabled: Bool = false
 
+    // MARK: - Screen Lock
+    @Published var isScreenLocked: Bool = false
+    /// Viewer đã nhấn "cho phép mở khoá" — camera chỉ unlock được khi cờ này = true.
+    @Published var isUnlockAllowed: Bool = false
+    private var savedBrightness: CGFloat = UIScreen.main.brightness
+
     // MARK: - Mic Selection
     private var routeChangeObserver: NSObjectProtocol?
 
@@ -493,6 +499,18 @@ extension LiveKitCameraService: RoomDelegate {
             Task { @MainActor in self.switchToMic(uid: uid) }
         } else if command == "request_mic_list" {
             Task { @MainActor in await self.sendMicList() }
+        } else if command == "lock_screen" {
+            Task { @MainActor in self.lockScreen() }
+        } else if command == "allow_unlock" {
+            Task { @MainActor in
+                self.isUnlockAllowed = true
+                cameraLogger.info("🔓 Viewer đã cho phép mở khoá")
+            }
+        } else if command == "revoke_unlock" {
+            Task { @MainActor in
+                self.isUnlockAllowed = false
+                cameraLogger.info("🔒 Viewer huỷ quyền mở khoá")
+            }
         }
     }
 }
@@ -577,5 +595,42 @@ extension LiveKitCameraService {
             try? await room.localParticipant.setMicrophone(enabled: true)
             await sendMicList()  // Push trạng thái mới về viewer
         }
+    }
+}
+
+// MARK: - Screen Lock
+
+extension LiveKitCameraService {
+
+    /// Khoá màn hình: tắt độ sáng, hiện overlay, thông báo viewer.
+    func lockScreen() {
+        guard !isScreenLocked else { return }
+        savedBrightness = UIScreen.main.brightness
+        UIScreen.main.brightness = 0
+        isScreenLocked = true
+        Task { await sendLockState(true) }
+        cameraLogger.info("🔒 Màn hình camera đã khoá")
+    }
+
+    /// Mở khoá màn hình: phục hồi độ sáng, ẩn overlay, thông báo viewer.
+    /// Chỉ nên được gọi khi `isUnlockAllowed == true` (đã kiểm tra ở view).
+    func unlockScreen() {
+        guard isScreenLocked else { return }
+        UIScreen.main.brightness = savedBrightness
+        isScreenLocked = false
+        isUnlockAllowed = false   // Reset — cần cho phép lại cho lần khoá tiếp theo
+        Task { await sendLockState(false) }
+        cameraLogger.info("🔓 Màn hình camera đã mở khoá")
+    }
+
+    /// Gửi trạng thái lock về viewer để đồng bộ UI.
+    private func sendLockState(_ locked: Bool) async {
+        guard let room = room else { return }
+        let command = "lock_state:\(locked ? 1 : 0)"
+        guard let data = command.data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
     }
 }

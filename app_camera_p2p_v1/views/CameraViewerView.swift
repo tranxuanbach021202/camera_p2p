@@ -52,8 +52,8 @@ struct CameraViewerView: View {
             
             // MARK: Top status bar + Bottom controls
             VStack {
+                // Top bar: Status (trái) — Nút X (phải)
                 HStack {
-                    // Status badge
                     StatusBadge(isConnected: service.isConnected, isReceiving: service.isReceiving)
 
                     Spacer()
@@ -72,6 +72,10 @@ struct CameraViewerView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
+
+                // Nút Lock giữa màn hình — cách xa nút X để tránh nhấn nhầm
+                LockControlButton(service: service)
+                    .padding(.top, 12)
 
                 Spacer()
 
@@ -263,6 +267,64 @@ struct StatusBadge: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+        .background(.ultraThinMaterial, in: Capsule())
+    }
+}
+
+// MARK: - Lock Control Button
+
+struct LockControlButton: View {
+    @ObservedObject var service: LiveKitViewerService
+
+    var body: some View {
+        Group {
+            if !service.isCameraLocked {
+                // Camera chưa khoá → nút Khoá
+                Button {
+                    Task { await service.sendLockScreen() }
+                } label: {
+                    LockLabel(icon: "lock.open.fill", text: "Khoá camera",
+                              iconColor: .white.opacity(0.85), textColor: .white.opacity(0.7))
+                }
+            } else if !service.hasGrantedUnlock {
+                // Camera đang khoá, chưa cho phép → nút Cho phép
+                Button {
+                    Task { await service.sendAllowUnlock() }
+                } label: {
+                    LockLabel(icon: "lock.fill", text: "Cho phép mở khoá",
+                              iconColor: .yellow, textColor: .yellow.opacity(0.9))
+                }
+            } else {
+                // Đã cho phép → nút Huỷ
+                Button {
+                    Task { await service.sendRevokeUnlock() }
+                } label: {
+                    LockLabel(icon: "lock.open.fill", text: "Huỷ cho phép",
+                              iconColor: .orange, textColor: .orange.opacity(0.9))
+                }
+            }
+        }
+        .disabled(!service.isConnected)
+    }
+}
+
+private struct LockLabel: View {
+    let icon: String
+    let text: String
+    let iconColor: Color
+    let textColor: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(iconColor)
+            Text(text)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(textColor)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
         .background(.ultraThinMaterial, in: Capsule())
     }
 }
