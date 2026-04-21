@@ -227,6 +227,7 @@ class LiveKitCameraService: NSObject, ObservableObject {
             try await room.localParticipant.setMicrophone(enabled: enabled)
             isMicEnabled = enabled
             cameraLogger.info("\(enabled ? "🎙️ Microphone ON" : "🔇 Microphone OFF")")
+            await sendMicState()   // Đồng bộ trạng thái về viewer
         } catch {
             cameraLogger.error("❌ setMicrophone(\(enabled)) failed: \(error)")
         }
@@ -511,6 +512,10 @@ extension LiveKitCameraService: RoomDelegate {
                 self.isUnlockAllowed = false
                 cameraLogger.info("🔒 Viewer huỷ quyền mở khoá")
             }
+        } else if command == "mic_mute" {
+            Task { @MainActor in await self.setMicrophone(enabled: false) }
+        } else if command == "mic_unmute" {
+            Task { @MainActor in await self.setMicrophone(enabled: true) }
         }
     }
 }
@@ -524,6 +529,17 @@ private struct MicPayload: Encodable {
 }
 
 extension LiveKitCameraService {
+
+    /// Gửi trạng thái mic (bật/tắt) về viewer để đồng bộ UI.
+    func sendMicState() async {
+        guard let room = room else { return }
+        let command = "mic_state:\(isMicEnabled ? 1 : 0)"
+        guard let data = command.data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+    }
 
     /// Đăng ký lắng nghe thay đổi audio route (cắm/tháo Bluetooth).
     /// Mỗi khi route thay đổi → push danh sách mic mới tới viewer.

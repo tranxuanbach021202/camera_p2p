@@ -36,6 +36,8 @@ class LiveKitViewerService: ObservableObject {
     @Published var availableMics: [MicInfo] = []
     /// Trạng thái khoá màn hình của camera, đồng bộ qua data channel.
     @Published var isCameraLocked: Bool = false
+    /// Mic của camera đang tắt (muted) hay bật.
+    @Published var isCameraMicMuted: Bool = true
     /// Viewer đã nhấn "Cho phép mở khoá" — camera cần cả cờ này lẫn giữ 5s.
     @Published var hasGrantedUnlock: Bool = false
     
@@ -260,6 +262,9 @@ extension LiveKitViewerService: RoomDelegate {
                 self.isCameraLocked = locked
                 if !locked { self.hasGrantedUnlock = false }  // Camera đã mở → reset quyền
             }
+        } else if command.hasPrefix("mic_state:") {
+            let enabled = command.dropFirst(10) == "1"
+            Task { @MainActor in self.isCameraMicMuted = !enabled }
         }
     }
 }
@@ -276,6 +281,18 @@ extension LiveKitViewerService {
             data: data,
             options: DataPublishOptions(topic: "camera_control", reliable: true)
         )
+    }
+
+    /// Mute hoặc unmute mic của camera.
+    func sendMicMuteCommand(muted: Bool) async {
+        guard let room = room, isConnected else { return }
+        let cmd = muted ? "mic_mute" : "mic_unmute"
+        guard let data = cmd.data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+        viewerLogger.debug("📤 \(muted ? "🔇 Mute" : "🎙️ Unmute") mic camera")
     }
 
     /// Gửi lệnh chọn mic tới camera theo UID.

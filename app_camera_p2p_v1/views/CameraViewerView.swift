@@ -134,6 +134,20 @@ struct CameraViewerView: View {
                             }
                         }
 
+                        // Nút mute/unmute mic camera
+                        Button {
+                            Task { await service.sendMicMuteCommand(muted: !service.isCameraMicMuted) }
+                        } label: {
+                            ZStack {
+                                Circle()
+                                    .fill(.ultraThinMaterial)
+                                    .frame(width: 56, height: 56)
+                                Image(systemName: service.isCameraMicMuted ? "mic.slash.fill" : "mic.fill")
+                                    .font(.system(size: 20))
+                                    .foregroundStyle(service.isCameraMicMuted ? .red : .white)
+                            }
+                        }
+
                         // Nút chụp ảnh
                         Button {
                             Task { await service.sendCapturePhotoCommand() }
