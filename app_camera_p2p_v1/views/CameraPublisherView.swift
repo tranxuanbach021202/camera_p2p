@@ -91,20 +91,20 @@ struct CameraPublisherView: View {
                     }
 
                     HStack(spacing: 20) {
-                        Button(service.isPublishing ? "Stop Stream" : "Start Stream") {
-                            Task {
-                                if service.isPublishing {
-                                    await service.stopPublishing()
-                                } else {
-                                    await service.connect()
-                                    if service.isConnected {
-                                        await service.startPublishingCamera()
-                                    }
-                                }
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isLocked)
+                        // Button(service.isPublishing ? "Stop Stream" : "Start Stream") {
+                        //     Task {
+                        //         if service.isPublishing {
+                        //             await service.stopPublishing()
+                        //         } else {
+                        //             await service.connect()
+                        //             if service.isConnected {
+                        //                 await service.startPublishingCamera()
+                        //             }
+                        //         }
+                        //     }
+                        // }
+                        // .buttonStyle(.borderedProminent)
+                        // .disabled(isLocked)
 
                         if service.isPublishing {
                             // Nút chụp ảnh
@@ -165,11 +165,11 @@ struct CameraPublisherView: View {
                             .disabled(isLocked)
                         }
 
-                        Button("Disconnect") {
-                            Task { await service.disconnect() }
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(isLocked)
+                        // Button("Disconnect") {
+                        //     Task { await service.disconnect() }
+                        // }
+                        // .buttonStyle(.bordered)
+                        // .disabled(isLocked)
                     }
                     .padding(.horizontal)
                     .padding(.bottom, 4)
