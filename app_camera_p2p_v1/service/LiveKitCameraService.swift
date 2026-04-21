@@ -224,9 +224,39 @@ class LiveKitCameraService: NSObject, ObservableObject {
     private func setMicrophone(enabled: Bool) async {
         guard let room = room else { return }
         do {
+            if enabled {
+                // Re-activate audio session trước khi LiveKit publish audio track.
+                // Cần thiết khi session đã bị deactivate từ lần mute trước.
+                let session = AVAudioSession.sharedInstance()
+                try? session.setCategory(
+                    .playAndRecord,
+                    mode: .videoRecording,
+                    options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
+                )
+                try? session.setActive(true)
+                cameraLogger.debug("🎙️ Audio session re-activated before mic enable")
+            }
+
             try await room.localParticipant.setMicrophone(enabled: enabled)
             isMicEnabled = enabled
             cameraLogger.info("\(enabled ? "🎙️ Microphone ON" : "🔇 Microphone OFF")")
+
+            if !enabled {
+                // Chờ LiveKit hoàn tất teardown audio track trước khi tắt session.
+                try? await Task.sleep(nanoseconds: 300_000_000)  // 300ms
+                // setActive(false) = dừng hoàn toàn AVAudioEngine I/O + WebRTC APM thread.
+                // An toàn vì camera app không subscribe remote audio nào.
+                do {
+                    try AVAudioSession.sharedInstance().setActive(
+                        false,
+                        options: .notifyOthersOnDeactivation
+                    )
+                    cameraLogger.debug("🔇 Audio session deactivated — APM stopped")
+                } catch {
+                    cameraLogger.warning("⚠️ setActive(false) failed: \(error)")
+                }
+            }
+
             await sendMicState()   // Đồng bộ trạng thái về viewer
         } catch {
             cameraLogger.error("❌ setMicrophone(\(enabled)) failed: \(error)")
