@@ -521,6 +521,9 @@ extension LiveKitCameraService: RoomDelegate {
             if parts.count == 2, let x = Double(parts[0]), let y = Double(parts[1]) {
                 Task { @MainActor in self.setFocusPoint(x: x, y: y) }
             }
+        } else if command.hasPrefix("exposure:"),
+                  let bias = Float(command.dropFirst(9)) {
+            Task { @MainActor in self.setExposureBias(bias) }
         }
     }
 }
@@ -659,6 +662,39 @@ extension LiveKitCameraService {
 // MARK: - Focus & Exposure
 
 extension LiveKitCameraService {
+
+    /// Điều chỉnh exposure bias (-2.0 ~ +2.0 EV).
+    func setExposureBias(_ bias: Float) {
+        guard let track = cameraTrack,
+              let capturer = track.capturer as? CameraCapturer,
+              let device = capturer.device else { return }
+
+        guard device.isExposureModeSupported(.custom) ||
+              device.isExposureModeSupported(.continuousAutoExposure) else { return }
+
+        let clamped = min(max(bias, device.minExposureTargetBias),
+                          device.maxExposureTargetBias)
+        do {
+            try device.lockForConfiguration()
+            device.setExposureTargetBias(clamped, completionHandler: nil)
+            device.unlockForConfiguration()
+            cameraLogger.debug("☀️ Exposure bias: \(clamped) EV")
+        } catch {
+            cameraLogger.error("❌ setExposureBias thất bại: \(error)")
+            return
+        }
+        Task { await sendExposureState(clamped) }
+    }
+
+    private func sendExposureState(_ bias: Float) async {
+        guard let room = room else { return }
+        let cmd = String(format: "exposure_state:%.2f", bias)
+        guard let data = cmd.data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+    }
 
     /// Đặt điểm lấy nét theo toạ độ chuẩn hoá (0–1) từ viewer.
     /// iOS dùng hệ (0,0) = top-left, (1,1) = bottom-right.

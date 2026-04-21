@@ -107,6 +107,13 @@ struct CameraViewerView: View {
 
                 // MARK: Bottom controls (chỉ hiện khi đang nhận stream)
                 if service.isReceiving {
+                    // Exposure slider
+                    ExposureBar(bias: service.exposureBias) { newBias in
+                        Task { await service.sendExposureCommand(newBias) }
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
+
                     ZoomControlBar(
                         zoomFactor: service.zoomFactor,
                         maxZoom: service.maxZoomFactor,
@@ -366,6 +373,48 @@ private struct LockLabel: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(.ultraThinMaterial, in: Capsule())
+    }
+}
+
+// MARK: - Exposure Bar
+
+struct ExposureBar: View {
+    let bias: Float
+    let onChange: (Float) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "sun.min")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.7))
+
+            Slider(
+                value: Binding(
+                    get: { Double(bias) },
+                    set: { onChange(Float($0)) }
+                ),
+                in: -2.0...2.0,
+                step: 0.1
+            )
+            .tint(.yellow)
+
+            Image(systemName: "sun.max")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.7))
+
+            // Reset về 0
+            Button {
+                onChange(0)
+            } label: {
+                Text(String(format: "%+.1f", bias))
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.yellow)
+                    .frame(width: 36)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 

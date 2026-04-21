@@ -40,6 +40,8 @@ class LiveKitViewerService: ObservableObject {
     @Published var isCameraMicMuted: Bool = true
     /// Toạ độ focus hiện tại trong view (dùng để hiển thị ring animation).
     @Published var focusPoint: CGPoint? = nil
+    /// Giá trị exposure bias đang được áp dụng trên camera (-2.0 ~ +2.0 EV).
+    @Published var exposureBias: Float = 0.0
     /// Viewer đã nhấn "Cho phép mở khoá" — camera cần cả cờ này lẫn giữ 5s.
     @Published var hasGrantedUnlock: Bool = false
     
@@ -267,6 +269,9 @@ extension LiveKitViewerService: RoomDelegate {
         } else if command.hasPrefix("mic_state:") {
             let enabled = command.dropFirst(10) == "1"
             Task { @MainActor in self.isCameraMicMuted = !enabled }
+        } else if command.hasPrefix("exposure_state:"),
+                  let bias = Float(command.dropFirst(15)) {
+            Task { @MainActor in self.exposureBias = bias }
         }
     }
 }
@@ -282,6 +287,17 @@ extension LiveKitViewerService {
         try? await room.localParticipant.publish(
             data: data,
             options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+    }
+
+    /// Gửi lệnh điều chỉnh exposure bias (-2.0 ~ +2.0 EV).
+    func sendExposureCommand(_ bias: Float) async {
+        guard let room = room, isConnected else { return }
+        let cmd = String(format: "exposure:%.2f", bias)
+        guard let data = cmd.data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: false)
         )
     }
 
