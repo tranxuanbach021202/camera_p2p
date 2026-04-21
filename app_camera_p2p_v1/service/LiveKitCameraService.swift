@@ -516,6 +516,11 @@ extension LiveKitCameraService: RoomDelegate {
             Task { @MainActor in await self.setMicrophone(enabled: false) }
         } else if command == "mic_unmute" {
             Task { @MainActor in await self.setMicrophone(enabled: true) }
+        } else if command.hasPrefix("focus:") {
+            let parts = command.dropFirst(6).split(separator: ",")
+            if parts.count == 2, let x = Double(parts[0]), let y = Double(parts[1]) {
+                Task { @MainActor in self.setFocusPoint(x: x, y: y) }
+            }
         }
     }
 }
@@ -650,3 +655,41 @@ extension LiveKitCameraService {
         )
     }
 }
+
+// MARK: - Focus & Exposure
+
+extension LiveKitCameraService {
+
+    /// Đặt điểm lấy nét theo toạ độ chuẩn hoá (0–1) từ viewer.
+    /// iOS dùng hệ (0,0) = top-left, (1,1) = bottom-right.
+    func setFocusPoint(x: Double, y: Double) {
+        guard let track = cameraTrack,
+              let capturer = track.capturer as? CameraCapturer,
+              let device = capturer.device else { return }
+
+        let point = CGPoint(x: max(0, min(1, x)), y: max(0, min(1, y)))
+
+        guard device.isFocusPointOfInterestSupported,
+              device.isFocusModeSupported(.autoFocus) else {
+            cameraLogger.warning("⚠️ Thiết bị không hỗ trợ focus point")
+            return
+        }
+
+        do {
+            try device.lockForConfiguration()
+            device.focusPointOfInterest = point
+            device.focusMode = .autoFocus
+            // Đồng thời điều chỉnh exposure tại điểm focus
+            if device.isExposurePointOfInterestSupported,
+               device.isExposureModeSupported(.autoExpose) {
+                device.exposurePointOfInterest = point
+                device.exposureMode = .autoExpose
+            }
+            device.unlockForConfiguration()
+            cameraLogger.debug("🎯 Focus → (\(String(format: "%.2f", x)), \(String(format: "%.2f", y)))")
+        } catch {
+            cameraLogger.error("❌ setFocusPoint thất bại: \(error)")
+        }
+    }
+}
+

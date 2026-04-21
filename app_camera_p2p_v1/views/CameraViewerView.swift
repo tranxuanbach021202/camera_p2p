@@ -34,18 +34,44 @@ struct CameraViewerView: View {
             
             // MARK: Video hoặc Waiting screen
             if let track = service.remoteVideoTrack {
-                SwiftUIVideoView(track, layoutMode: .fit)
-                    .ignoresSafeArea()
-                    .gesture(
-                        MagnificationGesture()
-                            .onChanged { value in
-                                let newZoom = baseZoom * value
-                                Task { await service.sendZoomCommand(factor: newZoom) }
+                GeometryReader { geo in
+                    SwiftUIVideoView(track, layoutMode: .fit)
+                        .ignoresSafeArea()
+                        .gesture(
+                            MagnificationGesture()
+                                .onChanged { value in
+                                    let newZoom = baseZoom * value
+                                    Task { await service.sendZoomCommand(factor: newZoom) }
+                                }
+                                .onEnded { _ in
+                                    baseZoom = service.zoomFactor
+                                }
+                        )
+                        .simultaneousGesture(
+                            DragGesture(minimumDistance: 0)
+                                .onEnded { value in
+                                    // Lọc tap (< 10pt) vs drag thật
+                                    let d = value.translation
+                                    guard sqrt(d.width * d.width + d.height * d.height) < 10 else { return }
+                                    Task {
+                                        await service.sendFocusCommand(
+                                            viewPoint: value.location,
+                                            viewSize: geo.size
+                                        )
+                                    }
+                                }
+                        )
+                        // Focus ring overlay
+                        .overlay {
+                            if let pt = service.focusPoint {
+                                FocusRingView()
+                                    .position(pt)
+                                    .transition(.opacity)
                             }
-                            .onEnded { _ in
-                                baseZoom = service.zoomFactor
-                            }
-                    )
+                        }
+                        .animation(.easeOut(duration: 0.25), value: service.focusPoint)
+                }
+                .ignoresSafeArea()
             } else {
                 WaitingForCameraView(isConnected: service.isConnected)
             }
@@ -340,5 +366,24 @@ private struct LockLabel: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
         .background(.ultraThinMaterial, in: Capsule())
+    }
+}
+
+// MARK: - Focus Ring
+
+struct FocusRingView: View {
+    @State private var scale: CGFloat = 1.4
+    @State private var opacity: Double = 1.0
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .stroke(Color.yellow, lineWidth: 1.5)
+            .frame(width: 68, height: 68)
+            .scaleEffect(scale)
+            .opacity(opacity)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.25)) { scale = 1.0 }
+                withAnimation(.easeIn(duration: 0.3).delay(1.1)) { opacity = 0 }
+            }
     }
 }

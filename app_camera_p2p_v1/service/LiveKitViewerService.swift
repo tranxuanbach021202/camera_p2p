@@ -38,6 +38,8 @@ class LiveKitViewerService: ObservableObject {
     @Published var isCameraLocked: Bool = false
     /// Mic của camera đang tắt (muted) hay bật.
     @Published var isCameraMicMuted: Bool = true
+    /// Toạ độ focus hiện tại trong view (dùng để hiển thị ring animation).
+    @Published var focusPoint: CGPoint? = nil
     /// Viewer đã nhấn "Cho phép mở khoá" — camera cần cả cờ này lẫn giữ 5s.
     @Published var hasGrantedUnlock: Bool = false
     
@@ -281,6 +283,26 @@ extension LiveKitViewerService {
             data: data,
             options: DataPublishOptions(topic: "camera_control", reliable: true)
         )
+    }
+
+    /// Gửi lệnh tap-to-focus với toạ độ chuẩn hoá (0–1) và hiển thị ring animation.
+    func sendFocusCommand(viewPoint: CGPoint, viewSize: CGSize) async {
+        guard let room = room, isConnected, viewSize.width > 0, viewSize.height > 0 else { return }
+        let nx = viewPoint.x / viewSize.width
+        let ny = viewPoint.y / viewSize.height
+        let cmd = String(format: "focus:%.4f,%.4f", nx, ny)
+        guard let data = cmd.data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: false)
+        )
+        // Hiển thị focus ring tại điểm chạm, tự ẩn sau 1.5s
+        focusPoint = viewPoint
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            await MainActor.run { self.focusPoint = nil }
+        }
+        viewerLogger.debug("🎯 Focus → (\(String(format: "%.2f", nx)), \(String(format: "%.2f", ny)))")
     }
 
     /// Mute hoặc unmute mic của camera.
