@@ -11,12 +11,10 @@ import LiveKit
 struct ContentView: View {
 
     var body: some View {
-        ModeSelectionView(
-            serverURL:    Config.LiveKit.serverURL,
-            cameraToken:  Config.LiveKit.cameraToken,
-            viewerToken:  Config.LiveKit.viewerToken
-            // telegramBotToken: Config.Telegram.botToken,
-            // telegramChatId:   Config.Telegram.chatId
+        KeyEntryView(
+            serverURL:   Config.LiveKit.serverURL,
+            cameraToken: Config.LiveKit.cameraToken,
+            viewerToken: Config.LiveKit.viewerToken
         )
     }
 }
