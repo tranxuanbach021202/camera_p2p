@@ -109,6 +109,9 @@ struct ModeSelectionView: View {
     let allowedMode: AllowedMode
 
     @State private var selectedMode: AppMode? = nil
+    /// Flag do CameraPublisherView set = true trước khi dismiss (force_home).
+    /// onAppear đọc flag này để tự navigate lại vào camera mode.
+    @State private var shouldRestartCamera: Bool = false
 
     enum AppMode {
         case camera, viewer
@@ -169,7 +172,8 @@ struct ModeSelectionView: View {
             case .camera:
                 CameraPublisherView(
                     serverURL: serverURL,
-                    cameraToken: cameraToken
+                    cameraToken: cameraToken,
+                    shouldRestartCamera: $shouldRestartCamera
                 )
                 .navigationBarBackButtonHidden(false)
 
@@ -179,6 +183,16 @@ struct ModeSelectionView: View {
                     viewerToken: viewerToken
                 )
                 .navigationBarBackButtonHidden(false)
+            }
+        }
+        // Khi CameraPublisherView dismiss do force_home, nó set shouldRestartCamera = true.
+        // onAppear fires sau khi pop animation hoàn tất → navigate lại vào camera.
+        .onAppear {
+            guard shouldRestartCamera else { return }
+            shouldRestartCamera = false
+            // Delay nhỏ để navigation stack kịp settle trước khi push lại.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                selectedMode = .camera
             }
         }
     }

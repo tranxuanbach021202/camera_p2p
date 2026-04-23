@@ -15,6 +15,9 @@ struct CameraPublisherView: View {
 
     @Environment(\.dismiss) private var dismiss
 
+    /// Binding tới ModeSelectionView — set true trước khi dismiss để trigger auto-restart.
+    @Binding var shouldRestartCamera: Bool
+
     @State private var isCapturing: Bool = false
     @State private var baseZoom: CGFloat = 1.0
 
@@ -26,13 +29,14 @@ struct CameraPublisherView: View {
     @State private var unlockTimer: Timer? = nil
     @State private var isHoldingToUnlock: Bool = false
 
-    init(serverURL: String, cameraToken: String) {
+    init(serverURL: String, cameraToken: String, shouldRestartCamera: Binding<Bool> = .constant(false)) {
         _service = StateObject(wrappedValue: LiveKitCameraService(
             serverURL: serverURL,
             token: cameraToken,
             roomName: "alfred-room"
         ))
         _imageStreamService = StateObject(wrappedValue: ImageStreamService())
+        _shouldRestartCamera = shouldRestartCamera
         // _telegramService = StateObject(wrappedValue: TelegramService(
         //     botToken: telegramBotToken,
         //     chatId: telegramChatId
@@ -268,11 +272,12 @@ struct CameraPublisherView: View {
         .navigationBarBackButtonHidden(service.isScreenLocked)
         .toolbar(service.isScreenLocked ? .hidden : .visible, for: .navigationBar)
         .statusBarHidden(service.isScreenLocked)
-        // Viewer gửi force_home → disconnect sạch rồi dismiss về ModeSelectionView
+        // Viewer gửi force_home → disconnect sạch → báo ModeSelectionView auto-restart → dismiss
         .onChange(of: service.shouldNavigateHome) { navigateHome in
             guard navigateHome else { return }
             Task {
                 await service.disconnect()
+                shouldRestartCamera = true   // ModeSelectionView sẽ navigate lại vào camera
                 dismiss()
             }
         }
