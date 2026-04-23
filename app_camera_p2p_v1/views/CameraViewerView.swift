@@ -50,6 +50,63 @@ struct CameraViewerView: View {
                 WaitingForCameraView(isConnected: service.isConnected)
             }
             
+            // MARK: Mic buttons — căn giữa màn hình, bên phải
+            if service.isReceiving {
+                VStack(spacing: 32) {
+                    // Nút chọn mic Bluetooth — chỉ hiện khi camera có ≥1 Bluetooth HFP
+                    if !service.availableMics.isEmpty {
+                        HStack(spacing: 10) {
+                            if let activeMic = service.availableMics.first(where: { $0.active }) {
+                                Text(activeMic.name)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.white)
+                                    .shadow(color: .gray.opacity(0.6), radius: 3, x: 0, y: 1)
+                                    .lineLimit(1)
+                            }
+                            Button {
+                                showMicPicker = true
+                            } label: {
+                                ZStack {
+                                    Circle()
+                                        .fill(.ultraThinMaterial)
+                                        .frame(width: 56, height: 56)
+                                    Image(systemName: "headphones")
+                                        .font(.system(size: 20))
+                                        .foregroundStyle(.white)
+                                }
+                            }
+                            .confirmationDialog("Chọn microphone", isPresented: $showMicPicker, titleVisibility: .visible) {
+                                ForEach(service.availableMics) { mic in
+                                    Button {
+                                        Task { await service.sendSelectMicCommand(uid: mic.uid) }
+                                    } label: {
+                                        Text(mic.active ? "✓  \(mic.name)" : mic.name)
+                                    }
+                                }
+                                Button("Huỷ", role: .cancel) {}
+                            }
+                        }
+                    }
+
+                    // Nút mute/unmute mic camera
+                    Button {
+                        Task { await service.sendMicMuteCommand(muted: !service.isCameraMicMuted) }
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(.ultraThinMaterial)
+                                .frame(width: 56, height: 56)
+                            Image(systemName: service.isCameraMicMuted ? "mic.slash.fill" : "mic.fill")
+                                .font(.system(size: 20))
+                                .foregroundStyle(service.isCameraMicMuted ? .red : .green)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                .padding(.trailing, 20)
+                .transition(.opacity)
+            }
+
             // MARK: Top status bar + Bottom controls
             VStack {
                 // Top bar: Status (trái) — Nút X (phải)
@@ -107,53 +164,11 @@ struct CameraViewerView: View {
                             }
                         }
 
-                        // Nút chọn mic Bluetooth — chỉ hiện khi camera có ≥1 Bluetooth HFP
-                        if !service.availableMics.isEmpty {
-                            Button {
-                                showMicPicker = true
-                            } label: {
-                                ZStack {
-                                    Circle()
-                                        .fill(.ultraThinMaterial)
-                                        .frame(width: 56, height: 56)
-                                    Image(systemName: "mic.fill")
-                                        .font(.system(size: 20))
-                                        .foregroundStyle(.white)
-                                }
-                            }
-                            .confirmationDialog("Chọn microphone", isPresented: $showMicPicker, titleVisibility: .visible) {
-                                ForEach(service.availableMics) { mic in
-                                    Button {
-                                        Task { await service.sendSelectMicCommand(uid: mic.uid) }
-                                    } label: {
-                                        // Dấu checkmark cho mic đang active
-                                        Text(mic.active ? "✓  \(mic.name)" : mic.name)
-                                    }
-                                }
-                                Button("Huỷ", role: .cancel) {}
-                            }
-                        }
-
-                        // Nút mute/unmute mic camera
-                        Button {
-                            Task { await service.sendMicMuteCommand(muted: !service.isCameraMicMuted) }
-                        } label: {
-                            ZStack {
-                                Circle()
-                                    .fill(.ultraThinMaterial)
-                                    .frame(width: 56, height: 56)
-                                Image(systemName: service.isCameraMicMuted ? "mic.slash.fill" : "mic.fill")
-                                    .font(.system(size: 20))
-                                    .foregroundStyle(service.isCameraMicMuted ? .red : .white)
-                            }
-                        }
-
                         // Nút chụp ảnh
                         Button {
                             Task { await service.sendCapturePhotoCommand() }
                         } label: {
                             ZStack {
-                                // Viền ngoài kiểu shutter
                                 Circle()
                                     .stroke(Color.white.opacity(0.8), lineWidth: 3)
                                     .frame(width: 64, height: 64)
