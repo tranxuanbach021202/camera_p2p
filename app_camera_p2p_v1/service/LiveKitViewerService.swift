@@ -40,6 +40,8 @@ class LiveKitViewerService: ObservableObject {
     @Published var isCameraMicMuted: Bool = true
     /// Viewer đã nhấn "Cho phép mở khoá" — camera cần cả cờ này lẫn giữ 5s.
     @Published var hasGrantedUnlock: Bool = false
+    /// FPS hiện tại của camera, đồng bộ qua data channel.
+    @Published var cameraFPS: Int = 3
     
     private var room: Room?
     let serverURL: String
@@ -265,6 +267,10 @@ extension LiveKitViewerService: RoomDelegate {
         } else if command.hasPrefix("mic_state:") {
             let enabled = command.dropFirst(10) == "1"
             Task { @MainActor in self.isCameraMicMuted = !enabled }
+        } else if command.hasPrefix("fps_state:"),
+                  let fps = Int(command.dropFirst(10)) {
+            viewerLogger.debug("📹 Camera FPS: \(fps)")
+            Task { @MainActor in self.cameraFPS = fps }
         }
     }
 }
@@ -272,6 +278,17 @@ extension LiveKitViewerService: RoomDelegate {
 // MARK: - Mic Control
 
 extension LiveKitViewerService {
+
+    /// Gửi lệnh đổi FPS cho camera.
+    func sendFPSCommand(_ fps: Int) async {
+        guard let room = room, isConnected else { return }
+        guard let data = "set_fps:\(fps)".data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+        viewerLogger.debug("📹 Gửi set_fps: \(fps)")
+    }
 
     /// Yêu cầu camera gửi lại danh sách mic hiện tại.
     func requestMicList() async {

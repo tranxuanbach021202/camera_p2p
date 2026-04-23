@@ -150,7 +150,10 @@ class LiveKitCameraService: NSObject, ObservableObject {
             self.isConnected = true
             cameraLogger.info("✅ Connected to room: \(self.roomName)")
             self.setupRouteChangeObserver()
-            Task { await self.sendMicList() }
+            Task {
+                await self.sendMicList()
+                await self.sendFPSState()   // Push FPS hiện tại để viewer đồng bộ ngay
+            }
 
         } catch {
             cameraLogger.error("❌ connect() threw: \(String(describing: error))")
@@ -539,6 +542,13 @@ extension LiveKitCameraService: RoomDelegate {
             Task { @MainActor in await self.setMicrophone(enabled: false) }
         } else if command == "mic_unmute" {
             Task { @MainActor in await self.setMicrophone(enabled: true) }
+        } else if command.hasPrefix("set_fps:"),
+                  let fps = Int(command.dropFirst(8)),
+                  LiveKitCameraService.fpsPresets.contains(fps) {
+            Task { @MainActor in
+                self.setFPS(fps)
+                await self.sendFPSState()
+            }
         } else if command == "force_home" {
             Task { @MainActor in
                 // Guard: không cho phép khi đang chụp ảnh hoặc đang đổi camera
@@ -687,6 +697,16 @@ extension LiveKitCameraService {
 // MARK: - FPS Control
 
 extension LiveKitCameraService {
+
+    /// Gửi FPS hiện tại về viewer để đồng bộ UI.
+    func sendFPSState() async {
+        guard let room = room, isConnected else { return }
+        guard let data = "fps_state:\(selectedFPS)".data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+    }
 
     /// Chọn FPS mới:
     /// - Lưu vào UserDefaults (dùng cho lần connect tiếp theo / sau force_home).

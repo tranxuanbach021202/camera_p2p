@@ -163,6 +163,16 @@ struct CameraViewerView: View {
 
                 // MARK: Bottom controls (chỉ hiện khi đang nhận stream)
                 if service.isReceiving {
+                    // FPS selector
+                    FPSControlBar(
+                        selectedFPS: service.cameraFPS,
+                        presets: [3, 5, 7, 10, 12, 15, 20]
+                    ) { fps in
+                        Task { await service.sendFPSCommand(fps) }
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
+
                     ZoomControlBar(
                         zoomFactor: service.zoomFactor,
                         maxZoom: service.maxZoomFactor,
