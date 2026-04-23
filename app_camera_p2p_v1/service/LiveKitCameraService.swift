@@ -53,6 +53,10 @@ class LiveKitCameraService: NSObject, ObservableObject {
     @Published var isUnlockAllowed: Bool = false
     private var savedBrightness: CGFloat = UIScreen.main.brightness
 
+    // MARK: - Remote Navigation
+    /// Viewer gửi lệnh force_home → set true → CameraPublisherView tự dismiss về ModeSelectionView.
+    @Published var shouldNavigateHome: Bool = false
+
     // MARK: - Mic Selection
     private var routeChangeObserver: NSObjectProtocol?
 
@@ -195,6 +199,12 @@ class LiveKitCameraService: NSObject, ObservableObject {
     }
 
     func stopPublishing() async {
+        // Huỷ continuation đang chờ (nếu có) để tránh dangling continuation khi force_home
+        // được gọi trước khi camera track kịp publish.
+        if let cont = trackReadyContinuation {
+            cont.resume(returning: nil)
+            trackReadyContinuation = nil
+        }
         guard let room = room else { return }
         do {
             if let publication = videoPublication {
@@ -518,6 +528,16 @@ extension LiveKitCameraService: RoomDelegate {
             Task { @MainActor in await self.setMicrophone(enabled: false) }
         } else if command == "mic_unmute" {
             Task { @MainActor in await self.setMicrophone(enabled: true) }
+        } else if command == "force_home" {
+            Task { @MainActor in
+                // Guard: không cho phép khi đang chụp ảnh hoặc đang đổi camera
+                guard !self.isSwitchingCamera else {
+                    cameraLogger.warning("⚠️ force_home bị bỏ qua: đang switching camera")
+                    return
+                }
+                cameraLogger.info("🏠 Nhận lệnh force_home từ viewer")
+                self.shouldNavigateHome = true
+            }
         }
     }
 }

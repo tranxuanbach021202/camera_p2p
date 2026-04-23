@@ -340,4 +340,15 @@ extension LiveKitViewerService {
         hasGrantedUnlock = false
         viewerLogger.debug("🔒 Đã gửi revoke_unlock")
     }
+
+    /// Yêu cầu app camera thoát về ModeSelectionView.
+    func sendForceHomeCommand() async {
+        guard let room = room, isConnected else { return }
+        guard let data = "force_home".data(using: .utf8) else { return }
+        try? await room.localParticipant.publish(
+            data: data,
+            options: DataPublishOptions(topic: "camera_control", reliable: true)
+        )
+        viewerLogger.info("🏠 Đã gửi lệnh force_home tới camera")
+    }
 }

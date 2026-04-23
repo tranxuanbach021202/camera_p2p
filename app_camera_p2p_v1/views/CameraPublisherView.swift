@@ -13,6 +13,8 @@ struct CameraPublisherView: View {
     @StateObject private var imageStreamService: ImageStreamService
     // @StateObject private var telegramService: TelegramService
 
+    @Environment(\.dismiss) private var dismiss
+
     @State private var isCapturing: Bool = false
     @State private var baseZoom: CGFloat = 1.0
 
@@ -266,6 +268,14 @@ struct CameraPublisherView: View {
         .navigationBarBackButtonHidden(service.isScreenLocked)
         .toolbar(service.isScreenLocked ? .hidden : .visible, for: .navigationBar)
         .statusBarHidden(service.isScreenLocked)
+        // Viewer gửi force_home → disconnect sạch rồi dismiss về ModeSelectionView
+        .onChange(of: service.shouldNavigateHome) { navigateHome in
+            guard navigateHome else { return }
+            Task {
+                await service.disconnect()
+                dismiss()
+            }
+        }
         .onAppear {
             // Bật battery monitoring sớm để batteryLevel có giá trị hợp lệ khi chụp ảnh.
             UIDevice.current.isBatteryMonitoringEnabled = true

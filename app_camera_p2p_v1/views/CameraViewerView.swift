@@ -19,6 +19,7 @@ struct CameraViewerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var baseZoom: CGFloat = 1.0
     @State private var showMicPicker = false
+    @State private var showForceHomeConfirm = false
     
     init(serverURL: String, viewerToken: String) {
         _service = StateObject(wrappedValue: LiveKitViewerService(
@@ -109,11 +110,35 @@ struct CameraViewerView: View {
 
             // MARK: Top status bar + Bottom controls
             VStack {
-                // Top bar: Status (trái) — Nút X (phải)
+                // Top bar: Status (trái) — ForceHome — Nút X (phải)
                 HStack {
                     StatusBadge(isConnected: service.isConnected, isReceiving: service.isReceiving)
 
                     Spacer()
+
+                    // Nút yêu cầu camera về màn chính — chỉ hiện khi đang kết nối
+                    if service.isConnected {
+                        Button {
+                            showForceHomeConfirm = true
+                        } label: {
+                            Image(systemName: "house.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(.white.opacity(0.75))
+                                .frame(width: 44, height: 44)
+                        }
+                        .confirmationDialog(
+                            "Về màn chính?",
+                            isPresented: $showForceHomeConfirm,
+                            titleVisibility: .visible
+                        ) {
+                            Button("Yêu cầu camera về màn chính", role: .destructive) {
+                                Task { await service.sendForceHomeCommand() }
+                            }
+                            Button("Huỷ", role: .cancel) {}
+                        } message: {
+                            Text("App camera sẽ ngắt kết nối và về màn chọn chế độ.")
+                        }
+                    }
 
                     // Disconnect button
                     Button {
