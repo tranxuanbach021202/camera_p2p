@@ -44,6 +44,17 @@ class LiveKitCameraService: NSObject, ObservableObject {
     var maxZoomFactor: CGFloat = 8.0
     @Published private(set) var isSwitchingCamera = false
 
+    // MARK: - FPS Selection
+    static let fpsPresets: [Int] = [3, 5, 10, 15, 20]
+    private static let fpsKey = "camera_selected_fps"
+
+    /// FPS hiện tại — persist qua UserDefaults, áp dụng ngay khi đang stream
+    /// hoặc tự động dùng lần connect tiếp theo.
+    @Published var selectedFPS: Int = {
+        let saved = UserDefaults.standard.integer(forKey: LiveKitCameraService.fpsKey)
+        return LiveKitCameraService.fpsPresets.contains(saved) ? saved : 3
+    }()
+
     // MARK: - Microphone State
     @Published var isMicEnabled: Bool = false
 
@@ -117,12 +128,12 @@ class LiveKitCameraService: NSObject, ObservableObject {
                 defaultCameraCaptureOptions: CameraCaptureOptions(
                     position: .front,
                     dimensions: .h480_43,
-                    fps: 3            //Hard Code Fps       // 15fps — tiết kiệm ~30% pin encode so với 24fps
+                    fps: selectedFPS          // Dùng FPS đã lưu (mặc định 3)
                 ),
                 defaultVideoPublishOptions: VideoPublishOptions(
                     encoding: VideoEncoding(
                         maxBitrate: 300_000,  // 300kbps — ổn định trên 4G yếu
-                        maxFps: 3 //Hard code FPS
+                        maxFps: selectedFPS   // Khớp với capture FPS
                     ),
                     simulcast: false          // tắt simulcast — không cần multi-layer khi chỉ có 1 viewer
                 )
@@ -314,7 +325,7 @@ class LiveKitCameraService: NSObject, ObservableObject {
         // h480_43 = 640×480 — format phải hỗ trợ ít nhất kích thước này để LiveKit có thể stream
         let minVideoWidth: Int32  = 640
         let minVideoHeight: Int32 = 480
-        let minFps: Float64       = 3.0 //Hard code FPS
+        let minFps: Float64       = Float64(selectedFPS)  // Dùng FPS đã chọn
 
         var bestFormat: AVCaptureDevice.Format?
         var bestPhotoPixels: Int64 = 0
@@ -670,5 +681,39 @@ extension LiveKitCameraService {
             data: data,
             options: DataPublishOptions(topic: "camera_control", reliable: true)
         )
+    }
+}
+
+// MARK: - FPS Control
+
+extension LiveKitCameraService {
+
+    /// Chọn FPS mới:
+    /// - Lưu vào UserDefaults (dùng cho lần connect tiếp theo / sau force_home).
+    /// - Nếu đang stream → áp dụng ngay qua frame duration lock (không restart session).
+    func setFPS(_ fps: Int) {
+        guard LiveKitCameraService.fpsPresets.contains(fps) else { return }
+        selectedFPS = fps
+        UserDefaults.standard.set(fps, forKey: LiveKitCameraService.fpsKey)
+        cameraLogger.info("📹 FPS chọn: \(fps)fps")
+
+        // Live apply — chỉ khi đang stream
+        guard let track = cameraTrack,
+              let capturer = track.capturer as? CameraCapturer,
+              let device = capturer.device else {
+            cameraLogger.debug("📹 Chưa stream — FPS \(fps) sẽ áp dụng khi connect lại")
+            return
+        }
+
+        do {
+            try device.lockForConfiguration()
+            let duration = CMTime(value: 1, timescale: CMTimeScale(fps))
+            device.activeVideoMinFrameDuration = duration
+            device.activeVideoMaxFrameDuration = duration
+            device.unlockForConfiguration()
+            cameraLogger.info("📹 FPS applied live: \(fps)fps")
+        } catch {
+            cameraLogger.error("❌ FPS live apply failed: \(error)")
+        }
     }
 }

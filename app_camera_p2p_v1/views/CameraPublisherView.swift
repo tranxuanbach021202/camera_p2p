@@ -81,6 +81,17 @@ struct CameraPublisherView: View {
 
                 if isControlsVisible {
                     if service.isPublishing {
+                        // FPS selector
+                        FPSControlBar(
+                            selectedFPS: service.selectedFPS,
+                            presets: LiveKitCameraService.fpsPresets
+                        ) { fps in
+                            service.setFPS(fps)
+                        }
+                        .padding(.horizontal)
+                        .padding(.bottom, 4)
+                        .opacity(isCapturing ? 0 : 1.0)
+
                         ZoomControlBar(
                             zoomFactor: service.zoomFactor,
                             maxZoom: service.maxZoomFactor,
@@ -360,6 +371,48 @@ struct CameraPublisherView: View {
             unlockProgress = 0
             isHoldingToUnlock = false
         }
+    }
+}
+
+// MARK: - FPS Control Bar
+
+struct FPSControlBar: View {
+    let selectedFPS: Int
+    let presets: [Int]
+    let onChange: (Int) -> Void
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "film")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.7))
+
+            Text("FPS")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.7))
+
+            ForEach(presets, id: \.self) { fps in
+                let isSelected = fps == selectedFPS
+                Button {
+                    guard !isSelected else { return }
+                    onChange(fps)
+                } label: {
+                    Text("\(fps)")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(isSelected ? .black : .white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            isSelected ? Color.white : Color.white.opacity(0.18),
+                            in: Capsule()
+                        )
+                }
+                .disabled(isSelected)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
