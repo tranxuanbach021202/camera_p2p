@@ -45,7 +45,7 @@ class LiveKitCameraService: NSObject, ObservableObject {
     @Published private(set) var isSwitchingCamera = false
 
     // MARK: - FPS Selection
-    static let fpsPresets: [Int] = [3, 5, 10, 15, 20]
+    static let fpsPresets: [Int] = [3, 5, 7, 10, 12, 15, 20]
     private static let fpsKey = "camera_selected_fps"
 
     /// FPS hiện tại — persist qua UserDefaults, áp dụng ngay khi đang stream
